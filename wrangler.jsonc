@@ -1,7 +1,5 @@
 {
-  // "name" must be exactly the project name you typed in Cloudflare
   "name": "sterling-erp",
   "compatibility_date": "2026-11-01",
-  // publish only the site folder (keeps the SQL file and README private)
-  "assets": { "directory": "./site" }
+  "assets": { "directory": "./sterling-system/site" }
 }
