@@ -1,0 +1,8 @@
+1_database_setup.sql
+README.txt
+README.md
+sterling_import.json
+wrangler.jsonc
+.git
+.gitignore
+.assetsignore
