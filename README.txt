@@ -208,3 +208,22 @@ OVERTIME RATE
   In a salary run the overtime rate is the day rate divided by 8, filled in automatically (shown in
   grey). If the day rate changes, the overtime rate follows. Type a different rate in the box only
   for a special case; a typed rate is kept. People on a fixed amount per run keep their own rate.
+
+==========================================================================
+VERSION 13: PROFILES, TEAM STATUS, FRIENDLY ERROR PAGE
+==========================================================================
+Update: upload the files to GitHub (new file: profile.js), then run 1_database_setup.sql again.
+
+MY PROFILE (admin, accountant, HR, procurement)
+  Click your name at the bottom of the sidebar. Upload a photo, set gender, and set a status:
+  Available, Busy, Away or Out of office, with an optional note and a "back on" date.
+  After that date the status goes back to Available by itself.
+
+TEAM STATUS (owner and admin)
+  Overview > Team status shows everyone's photo, status, note and whether they are online now
+  (the system is open on their device) or when they were last seen.
+
+WHEN SOMETHING GOES WRONG
+  Instead of technical messages, people see "Sorry for the inconvenience. Please contact the
+  developer." with a small line of details for the developer, and a Try again button.
+  This shows for: a login with no role or a blocked login, the database not reachable, or a crash.

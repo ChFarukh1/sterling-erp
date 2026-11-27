@@ -548,5 +548,5 @@
   EXT.onLogout = () => { if (origLogout) origLogout(); Object.keys(P).forEach((k) => { P[k] = []; }); };
   const origRole = EXT.onRole;
   EXT.onRole = () => { if (origRole) origRole(); if (!LIVE) loadDemo(); };
-  X.startApp();
+  // profile.js loads next and starts the app
 })();

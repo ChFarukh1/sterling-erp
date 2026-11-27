@@ -99,6 +99,17 @@ table.reg{font-size:12.5px;width:auto;min-width:100%}.reg th,.reg td{padding:4px
 .auth-box input{padding:10px 12px;font-size:15px;width:100%}.auth-box .pw{position:relative;display:block}.auth-box .pw input{padding-right:58px}
 .auth-box .pw button{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:13px;text-decoration:none}
 .auth-box button.pri{width:100%;padding:11px;font-size:15px}.auth-err{color:var(--bad);min-height:1.4em;margin:0 0 10px;font-size:13px}.auth-err.good{color:var(--ok);background:var(--ok-bg);padding:9px 12px;border-radius:6px}.auth-err.good:empty{display:none}.auth-box .link{text-decoration:none;font-size:13.5px}.auth-box .link:hover{text-decoration:underline}
+.sorry h2{margin-top:6px}.sorry p{color:var(--ink);font-size:15px}.sorry .tech{font-size:12px;color:var(--mut);background:#f4f6f9;border-radius:6px;padding:8px 10px;margin-top:14px;overflow-wrap:anywhere}.sorry-ic{width:46px;height:46px;border-radius:50%;background:var(--gold-l);color:#a26d00;font-weight:800;font-size:24px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 4px #fff7e3}
+.side .foot button.me{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;padding:6px;margin:0 0 10px;border-radius:9px;text-align:left;color:inherit;font:inherit;cursor:pointer}.side .foot button.me:hover{background:rgba(255,255,255,.08)}
+.mstat{display:block;font-size:11px;color:#c5d2e6;margin-top:3px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pav{position:relative;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:var(--gold);color:var(--navy-dd);font-weight:700;flex:none}.pav img{width:100%;height:100%;border-radius:50%;object-fit:cover}.pav .pdot{position:absolute;right:-1px;bottom:-1px;width:11px;height:11px;border-radius:50%;border:2px solid var(--navy)}
+.st-av{--sc:#1d8a43}.st-busy{--sc:#c0392b}.st-away{--sc:#d49a00}.st-ooo{--sc:#6b46a8}.pdot{background:var(--sc)}
+.spill{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;padding:2px 10px;border-radius:20px;background:color-mix(in srgb,var(--sc) 12%,#fff);color:var(--sc)}.spill i{width:8px;height:8px;border-radius:50%;background:var(--sc)}
+.prof{display:flex;gap:28px;align-items:flex-start;flex-wrap:wrap}.prof-l{display:flex;flex-direction:column;align-items:center;gap:10px;min-width:140px}.prof-l label.b{cursor:pointer}.prof-r{flex:1;min-width:260px}.prof-r select{min-width:200px}
+.stgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}.stopt{font:inherit;text-align:left;background:#fff;border:1.5px solid var(--line);border-radius:10px;padding:12px;cursor:pointer;display:flex;flex-direction:column;gap:6px}.stopt:hover{border-color:#aab6c8}.stopt.on{border-color:var(--navy);box-shadow:0 0 0 3px var(--acc-bg)}.stopt small{font-size:12px}
+.team{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}.tm{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;box-shadow:var(--sh)}.tm-h{display:flex;gap:12px;align-items:center;margin-bottom:10px;position:relative}.tm-h b{display:block;font-size:15px}.tm-h span{font-size:12.5px;color:var(--mut)}
+.pres{position:absolute;left:42px;top:40px;width:14px;height:14px;border-radius:50%;background:#b8c0cc;border:2px solid #fff}.pres.on{background:#22a04b}
+.tm-note{margin:8px 0 0;font-size:13.5px}.tm-until{margin:2px 0 0;font-size:12.5px}.tm-seen{margin:8px 0 0;font-size:12px;color:var(--mut)}.tm-seen.on{color:var(--ok);font-weight:600}.tm-mail{font-size:12px;display:block;margin-top:4px;overflow-wrap:anywhere}
 #toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#14213a;color:#fff;padding:10px 16px;border-radius:9px;font-size:13.5px;display:none;max-width:90vw;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,.2);border-left:3px solid var(--gold)}
 .mut{color:var(--mut)}.right{margin-left:auto}.nowrap{white-space:nowrap}
 /* site attendance app: built for phones */
@@ -162,9 +173,10 @@ table.kv td:first-child{color:var(--mut);width:34%;white-space:nowrap}
 <script>window.XLSX || document.write('<script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"><\/script>');</script>
 <script src="config.js"></script>
 <script>window.SEC_WAIT_FOR_MODULES = true;</script>
-<script src="logic.js?v=12"></script>
-<script src="app.js?v=12"></script>
-<script src="hr.js?v=12"></script>
-<script src="proc.js?v=12"></script>
+<script src="logic.js?v=13"></script>
+<script src="app.js?v=13"></script>
+<script src="hr.js?v=13"></script>
+<script src="proc.js?v=13"></script>
+<script src="profile.js?v=13"></script>
 </body>
 </html>

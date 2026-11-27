@@ -708,3 +708,57 @@ do $$ begin
   create policy proc_files_write on storage.objects for insert to authenticated with check (bucket_id = 'procurement' and public.is_proc());
 exception when others then raise notice 'Storage setup skipped: %', sqlerrm;
 end $$;
+
+-- =====================================================================================
+-- PROFILES AND STATUS (version 13)
+-- Admin, accountant, HR and procurement set their own photo, gender and status
+-- (Available, Busy, Away, Out of office). The owner and the admin see everyone's status.
+-- =====================================================================================
+alter table public.profiles add column if not exists avatar text;
+alter table public.profiles add column if not exists gender text;
+alter table public.profiles add column if not exists status text not null default 'available';
+alter table public.profiles add column if not exists status_note text;
+alter table public.profiles add column if not exists status_until date;
+alter table public.profiles add column if not exists last_seen timestamptz;
+alter table public.profiles drop constraint if exists profiles_status_check;
+alter table public.profiles add constraint profiles_status_check check (status in ('available', 'busy', 'away', 'ooo'));
+
+-- People change only these fields, and only on their own login. Role, sites and access stay with the admin.
+create or replace function public.my_profile_save(p_avatar text, p_gender text, p_status text, p_note text, p_until date) returns void
+language plpgsql security definer set search_path = public as
+$$ begin
+  if not exists (select 1 from public.profiles where id = auth.uid() and active and role in ('admin', 'accountant', 'hr', 'procurement')) then
+    raise exception 'Profiles are for admin, accountant, HR and procurement logins';
+  end if;
+  if p_status not in ('available', 'busy', 'away', 'ooo') then raise exception 'Unknown status'; end if;
+  if coalesce(p_gender, '') not in ('', 'M', 'F') then raise exception 'Unknown gender'; end if;
+  if p_avatar is not null and (length(p_avatar) > 300000 or p_avatar !~ '^data:image/(jpeg|png|webp);base64,') then raise exception 'The photo must be a small JPG or PNG image'; end if;
+  update public.profiles set avatar = p_avatar, gender = nullif(p_gender, ''), status = p_status,
+         status_note = nullif(left(trim(coalesce(p_note, '')), 120), ''), status_until = p_until, last_seen = now()
+   where id = auth.uid();
+end $$;
+
+-- Called every few minutes while the system is open, so the owner can see who is online.
+create or replace function public.touch_presence() returns void
+language sql security definer set search_path = public as
+$$ update public.profiles set last_seen = now() where id = auth.uid() and role in ('admin', 'accountant', 'hr', 'procurement', 'owner') $$;
+
+-- Everyone's status, for the owner and the admin. An "until" date in the past means back to Available.
+create or replace function public.team_status() returns table (id uuid, name text, email text, role text, avatar text, gender text, status text, status_note text, status_until date, last_seen timestamptz)
+language sql stable security definer set search_path = public, auth as
+$$ select p.id, p.name, u.email::text, p.role, p.avatar, p.gender,
+          case when p.status_until is not null and p.status_until < public.pk_today() then 'available' else p.status end,
+          case when p.status_until is not null and p.status_until < public.pk_today() then null else p.status_note end,
+          case when p.status_until is not null and p.status_until < public.pk_today() then null else p.status_until end,
+          p.last_seen
+     from public.profiles p join auth.users u on u.id = p.id
+    where p.active and p.role in ('admin', 'accountant', 'hr', 'procurement')
+      and exists (select 1 from public.profiles me where me.id = auth.uid() and me.active and me.role in ('owner', 'admin'))
+    order by array_position(array['admin', 'accountant', 'hr', 'procurement'], p.role), p.name $$;
+
+revoke execute on function public.my_profile_save(text, text, text, text, date) from public, anon;
+revoke execute on function public.touch_presence() from public, anon;
+revoke execute on function public.team_status() from public, anon;
+grant execute on function public.my_profile_save(text, text, text, text, date) to authenticated;
+grant execute on function public.touch_presence() to authenticated;
+grant execute on function public.team_status() to authenticated;

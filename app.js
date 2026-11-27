@@ -36,7 +36,15 @@
   const leafSites = () => sortedSites().filter((s) => !S.sites.some((c) => c.parent_id === s.id));
   let toastTimer = null;
   function toast(m) { const t = $('#toast'); t.textContent = m; t.style.display = 'block'; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.style.display = 'none'; }, 3800); }
-  const fail = (e) => { console.error(e); toast('Could not save: ' + (e && e.message ? e.message : e)); };
+  // Something went wrong while saving or loading: apologise, and keep the technical detail short for the developer.
+  const fail = (e) => { console.error(e); const m = e && e.message ? e.message : String(e || ''); toast(/^(Enter|Choose|Type|Add|Write|Tick|This |That |There |Only |The |A |HR |Attendance|Every|No )/.test(m) ? m : 'Sorry, something went wrong and it was not saved. Please try again, and contact the developer if it keeps happening.' + (m ? ' (' + m.slice(0, 120) + ')' : '')); };
+  window.addEventListener('unhandledrejection', (ev) => { console.error(ev.reason); fail(ev.reason); });
+  // The full page shown whenever the system cannot be used: no role, blocked, database not reachable, or a crash.
+  function sorry(detail, signedIn) {
+    if (detail) console.error('Sterling:', detail); // kept in the browser console for the developer, not shown on the page
+    $('#app').innerHTML = '<div class="auth"><div class="auth-brand"><img src="logo.jpg" alt=""><h1>Sterling Engineering<br>and Construction</h1><p>Payroll, HR, attendance and procurement</p></div><div class="auth-form"><div class="auth-box sorry"><div class="sorry-ic">!</div><h2>Sorry for the inconvenience</h2><p>The system is not available for you at the moment. Please contact the developer.</p><p>Thank you for your patience.</p>' +
+      '<p style="display:flex;gap:8px;margin-top:18px"><button class="b pri" data-act="sorryRetry">Try again</button>' + (signedIn ? '<button class="b" data-act="logout">Sign out</button>' : '') + '</p></div></div></div>';
+  }
 
   // ---------- storage (Supabase when configured, this browser otherwise) ----------
   function persistLocal() { if (LIVE) return; try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('This browser could not store the demo data.'); } }
@@ -668,10 +676,13 @@
     if (UI.role === 'site' && EXT.siteApp) { paint(EXT.siteApp()); return; }
     if (!allowed(UI.view)) UI.view = allowed(homeView()) ? homeView() : 'dashboard';
     const initials = (UI.name || UI.user || 'D').split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
-    const who = LIVE ? '<div class="me"><span class="av">' + esc(initials) + '</span><div><div class="who"' + (UI.name ? ' title="' + esc(UI.user || '') + '"' : '') + '>' + esc(UI.name || UI.user || '') + '</div><span class="role">' + (ROLE_NAME[UI.role] || UI.role) + '</span></div></div><button data-act="refresh">Refresh data</button><button data-act="changePw">Change password</button><button data-act="logout">Sign out</button>' : '<span class="role">Demo mode</span>';
+    const meTag = allowed('profile') ? 'button class="me" data-act="nav" data-v="profile" title="My profile and status"' : 'div class="me"';
+    const meBox = '<' + meTag + '>' + (EXT.avatar ? EXT.avatar(initials) : '<span class="av">' + esc(initials) + '</span>') + '<div><div class="who"' + (UI.name ? ' title="' + esc(UI.user || '') + '"' : '') + '>' + esc(UI.name || UI.user || (LIVE ? '' : 'Demo user')) + '</div><span class="role">' + (ROLE_NAME[UI.role] || UI.role) + '</span>' + (EXT.statusLine ? EXT.statusLine() : '') + '</div></' + meTag.split(' ')[0] + '>';
+    const who = LIVE ? meBox + '<button data-act="refresh">Refresh data</button><button data-act="changePw">Change password</button><button data-act="logout">Sign out</button>' : meBox + '<span class="role">Demo mode</span>';
     let h = '<div class="shell"><nav class="side" data-version="' + VERSION + '"><div class="brand"><img src="logo.jpg" alt=""><span>Sterling Engineering<small>Payroll · HR · Attendance</small></span></div><div class="nav">' + navHtml() + '</div><div class="foot">' + who + '</div></nav><div class="scrim" data-act="toggleNav"></div><main class="main"><header class="mtop"><button class="hamb" data-act="toggleNav" aria-label="Menu">\u2630</button><img src="logo.jpg" alt=""><b>Sterling Engineering</b></header>';
     if (!LIVE) h += '<div class="banner"><span><b>Demo mode.</b> Data is kept only in this browser until the system is connected to the database.</span><span class="right">View as <select data-chg="role">' + Object.keys(ROLE_NAME).map((r) => '<option value="' + r + '"' + (UI.role === r ? ' selected' : '') + '>' + ROLE_NAME[r] + '</option>').join('') + '</select></span></div>';
-    if (UI.schemaOld) h += '<div class="banner" style="background:var(--bad-bg);color:var(--bad)"><b>The database needs an update.</b> Run 1_database_setup.sql again in Supabase, SQL Editor, then reload this page. Until then, saving will fail. Your data is kept.</div>';
+    if (UI.schemaOld && !isSys()) h += '<div class="banner" style="background:var(--bad-bg);color:var(--bad)"><b>Sorry for the inconvenience.</b> Some parts of the system are being updated and may not work yet. Please contact the developer.</div>';
+    if (UI.schemaOld && isSys()) h += '<div class="banner" style="background:var(--bad-bg);color:var(--bad)"><b>The database needs an update.</b> Run 1_database_setup.sql again in Supabase, SQL Editor, then reload this page. Until then, saving will fail. Your data is kept.</div>';
     h += (VIEWS[UI.view] || EXT.views[UI.view])() + '</main></div>';
     const ae = document.activeElement, af = ae && ae.dataset && ae.dataset.inp ? ae.id : '';
     paint(h);
@@ -706,6 +717,7 @@
   const A = {
     nav(el) { if (window.innerWidth < 821) document.body.classList.remove('nav-open'); UI.view = el.dataset.v; UI.prId = null; UI.prDraft = null; UI.prTab = null; UI.pqEdit = null; UI.poId = null; UI.poRecv = false; UI.supEdit = null; UI.runId = null; UI.empId = null; UI.newRun = false; UI.msg = ''; UI.advQ = ''; UI.advEmp = null; render(); window.scrollTo(0, 0); },
     toggleNav() { document.body.classList.toggle('nav-open'); },
+    sorryRetry() { location.reload(); },
     clearFilter() { UI.filter = { siteId: '', from: '', to: '' }; UI.payRuns = null; render(); },
     pickSite(el) { if (SITE[el.dataset.id]) { UI.filter.siteId = el.dataset.id; UI.payRuns = null; render(); } },
     openRun(el) { UI.view = 'runs'; UI.runId = el.dataset.id; render(); window.scrollTo(0, 0); },
@@ -1010,7 +1022,7 @@
   if (LIVE) setInterval(autoRefresh, Math.max(1, Number(cfg.refreshSeconds) || 45) * 1000);
 
   // ---------- interface for other modules ----------
-  window.SEC = { S, UI, PL, EXT, A, C, LIVE, cfg, get sb() { return sb; }, $, esc, fmt, fmt0, dmy, uuid, today, toast, fail, numOrNull, strOrNull, save, saveMany, remove, render, index, siteName, siteOptions, sortedSites, leafSites, stat, xlsxOut, download, isAdmin, isSys, isHR, canHR, icon, typing, refreshData, get EMP() { return EMP; }, get SITE() { return SITE; }, get RUN() { return RUN; }, startApp: () => start().catch((e) => { console.error(e); $('#app').innerHTML = '<p style="padding:24px">Could not start: ' + esc(e.message || e) + '</p>'; }) };
+  window.SEC = { S, UI, PL, EXT, A, C, LIVE, cfg, get sb() { return sb; }, $, esc, fmt, fmt0, dmy, uuid, today, toast, fail, numOrNull, strOrNull, save, saveMany, remove, render, index, siteName, siteOptions, sortedSites, leafSites, stat, xlsxOut, download, isAdmin, isSys, isHR, canHR, icon, typing, refreshData, get EMP() { return EMP; }, get SITE() { return SITE; }, get RUN() { return RUN; }, startApp: () => start().catch((e) => { console.error(e); sorry(e && e.message ? e.message : e, !!(sb && UI.user)); }) };
 
   // ---------- start ----------
   let recovering = false;
@@ -1021,7 +1033,7 @@
     if (recovering) return renderNewPassword();
     let prof = await sb.from('profiles').select('role,name,site_ids,active').eq('id', data.session.user.id).maybeSingle();
     if (prof.error) prof = await sb.from('profiles').select('role,name').eq('id', data.session.user.id).maybeSingle(); // database not updated yet
-    if (prof.error || !prof.data || prof.data.active === false) { $('#app').innerHTML = '<div class="auth"><div class="auth-brand"><img src="logo.jpg" alt=""><h1>Sterling Engineering<br>and Construction</h1><p>Payroll, HR and site attendance</p></div><div class="auth-form"><div class="auth-box"><h2>No access yet</h2><p>This login has not been given a role. Ask the accountant to add it in the database setup.</p><button class="b" data-act="logout">Sign out</button></div></div></div>'; return; }
+    if (prof.error || !prof.data || prof.data.active === false) return sorry(prof.error ? prof.error.message : !prof.data ? 'No role has been given to ' + UI.user + '.' : 'The login ' + UI.user + ' is blocked.', true);
     UI.role = ROLE_NAME[prof.data.role] ? prof.data.role : 'owner';
     // the person's name from the database; the setup's placeholder names count as not set
     const nm = (prof.data.name || '').trim(); UI.name = nm && !/^(accountant|owner)$/i.test(nm) ? nm : '';
@@ -1036,7 +1048,7 @@
   }
   async function start() {
     if (LIVE) {
-      if (!window.supabase) { $('#app').innerHTML = '<p style="padding:24px">Could not load the database library. Check the internet connection and reload.</p>'; return; }
+      if (!window.supabase) return sorry('The database library could not be downloaded on this network.', false);
       // A link from a password-reset email carries its details in the address; read them before the library clears them.
       const link = location.hash + '&' + location.search;
       const linkError = /error_code=otp_expired|error=access_denied/.test(link);
