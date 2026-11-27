@@ -1,9 +1,8 @@
 STERLING ENGINEERING - PAYROLL, HR, ATTENDANCE AND PROCUREMENT - SETUP GUIDE (version 12)
-
 FILES
   index.html, app.js, logic.js, config.js   the system (payroll)
   hr.js                                     HR, live attendance, attendance register, letters, users and access
-  proc.js                                   procurement: requests, RFQ, quotations, comparison, approval, POs, deliveries, suppliers
+  proc.js                                   procurement: requests, RFQ,  h  quotations, comparison, approval, POs, deliveries, suppliers
   templates.js                              company documents (offer, warning, experience, termination letters, RFQ, purchase order)
   logo.jpg, favicon.png                     company logo (upload these with the system)
   1_database_setup.sql                      run once in Supabase
