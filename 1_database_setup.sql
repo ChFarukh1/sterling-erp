@@ -720,6 +720,8 @@ alter table public.profiles add column if not exists status text not null defaul
 alter table public.profiles add column if not exists status_note text;
 alter table public.profiles add column if not exists status_until date;
 alter table public.profiles add column if not exists last_seen timestamptz;
+alter table public.profiles add column if not exists status_set_on date;
+alter table public.profiles add column if not exists status_auto_on date;
 alter table public.profiles drop constraint if exists profiles_status_check;
 alter table public.profiles add constraint profiles_status_check check (status in ('available', 'busy', 'away', 'ooo'));
 
@@ -734,7 +736,8 @@ $$ begin
   if coalesce(p_gender, '') not in ('', 'M', 'F') then raise exception 'Unknown gender'; end if;
   if p_avatar is not null and (length(p_avatar) > 300000 or p_avatar !~ '^data:image/(jpeg|png|webp);base64,') then raise exception 'The photo must be a small JPG or PNG image'; end if;
   update public.profiles set avatar = p_avatar, gender = nullif(p_gender, ''), status = p_status,
-         status_note = nullif(left(trim(coalesce(p_note, '')), 120), ''), status_until = p_until, last_seen = now()
+         status_note = nullif(left(trim(coalesce(p_note, '')), 120), ''), status_until = p_until, last_seen = now(),
+         status_set_on = case when status is distinct from p_status then public.pk_today() else status_set_on end
    where id = auth.uid();
 end $$;
 
@@ -762,3 +765,32 @@ revoke execute on function public.team_status() from public, anon;
 grant execute on function public.my_profile_save(text, text, text, text, date) to authenticated;
 grant execute on function public.touch_presence() to authenticated;
 grant execute on function public.team_status() to authenticated;
+
+
+-- ---------- Daily check-in (version 13.2) ----------
+-- Office hours: 9 AM to 5 PM Pakistan time, Monday to Saturday. The first time a person has the system open
+-- during office hours each day, the status becomes Available, unless they are on leave (Out of office with no
+-- end date or an end date still to come) or they already chose a status themselves today.
+-- To change the hours or days, edit the three lines marked OFFICE below and run this file again.
+create or replace function public.auto_checkin() returns text
+language plpgsql security definer set search_path = public as
+$$ declare p record; t timestamp := now() at time zone 'Asia/Karachi'; d date := (now() at time zone 'Asia/Karachi')::date;
+begin
+  select * into p from public.profiles where id = auth.uid() and active and role in ('admin', 'accountant', 'hr', 'procurement');
+  if p.id is null then return null; end if;
+  update public.profiles set last_seen = now() where id = p.id;
+  if extract(isodow from t) = 7 then return p.status; end if;        -- OFFICE: Sunday is off
+  if t::time < time '09:00' then return p.status; end if;              -- OFFICE: starts 9 AM
+  if t::time >= time '17:00' then return p.status; end if;             -- OFFICE: ends 5 PM
+  if p.status_auto_on = d then return p.status; end if;
+  update public.profiles set status_auto_on = d where id = p.id;
+  if p.status = 'ooo' and (p.status_until is null or p.status_until >= d) then return p.status; end if;
+  if p.status_set_on = d then return p.status; end if;
+  update public.profiles set status = 'available', status_note = null, status_until = null where id = p.id;
+  return 'available';
+end $$;
+revoke execute on function public.auto_checkin() from public, anon;
+grant execute on function public.auto_checkin() to authenticated;
+
+-- Tell Supabase to pick up new and changed functions right away
+notify pgrst, 'reload schema';

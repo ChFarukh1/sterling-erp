@@ -1,6 +1,5 @@
 STERLING ENGINEERING - PAYROLL, HR, ATTENDANCE AND PROCUREMENT - SETUP GUIDE (version 12)
 
-
 FILES
   index.html, app.js, logic.js, config.js   the system (payroll)
   hr.js                                     HR, live attendance, attendance register, letters, users and access
@@ -228,3 +227,12 @@ WHEN SOMETHING GOES WRONG
   Instead of technical messages, people see "Sorry for the inconvenience. Please contact the
   developer." with a small line of details for the developer, and a Try again button.
   This shows for: a login with no role or a blocked login, the database not reachable, or a crash.
+
+VERSION 13.2: STATUS SAVES ON CLICK, DAILY CHECK-IN
+  Clicking a status (Available, Busy, Away, Out of office) saves it at once. The note, back-on date,
+  photo and gender still need Save.
+  Office hours are 9 AM to 5 PM Pakistan time, Monday to Saturday. The first time a person opens the
+  system during office hours each day, the status becomes Available, unless they are Out of office with
+  no end date or an end date still to come, or they already picked a status themselves that day.
+  Team status shows "Not in today" for people who have not opened the system today, and "Off hours"
+  after 5 PM. To change office hours, edit the lines marked OFFICE in 1_database_setup.sql and in profile.js.

@@ -11,6 +11,9 @@
   const canSee = () => ['owner', 'admin'].includes(UI.role);
   const today = () => X.docs.pkDay();
   const DKEY = 'sterling_profile_demo_v1';
+  // Office hours: 9 AM to 5 PM Pakistan time, Monday to Saturday (the database uses the same rule)
+  function pkNow() { const p = {}; new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Karachi', weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date()).forEach((x) => { p[x.type] = x.value; }); return { day: p.weekday, mins: Number(p.hour) * 60 + Number(p.minute) }; }
+  const officeOpen = () => { const n = pkNow(); return n.day !== 'Sun' && n.mins >= 9 * 60 && n.mins < 17 * 60; };
   const ME = { avatar: null, gender: '', status: 'available', status_note: '', status_until: null };
   let TEAM = null, teamErr = '', teamAt = null;
 
@@ -37,16 +40,17 @@
   async function myId() { const r = await X.sb.auth.getSession(); return r.data && r.data.session ? r.data.session.user.id : null; }
   async function loadMe() {
     if (!canEdit() && UI.role !== 'owner') return;
-    if (!LIVE) { Object.assign(ME, { avatar: null, gender: '', status: 'available', status_note: '', status_until: null }, demo()[UI.role] || {}); return; }
+    if (!LIVE) { Object.assign(ME, { avatar: null, gender: '', status: 'available', status_note: '', status_until: null }, demo()[UI.role] || {}); demoCheckin(); return; }
     try {
       const id = await myId(); if (!id) return;
+      if (canEdit()) await X.sb.rpc('auto_checkin').then(() => {}, () => {}); // daily check-in during office hours
       const r = await X.sb.from('profiles').select('avatar,gender,status,status_note,status_until').eq('id', id).maybeSingle();
       if (!r.error && r.data) Object.assign(ME, r.data);
-      ping();
+      if (!canEdit()) ping();
     } catch (e) { console.error(e); }
   }
   async function saveMe(p) {
-    if (!LIVE) { const d = demo(); d[UI.role] = Object.assign({}, p, { last_seen: new Date().toISOString() }); localStorage.setItem(DKEY, JSON.stringify(d)); Object.assign(ME, p); return; }
+    if (!LIVE) { const d = demo(), old = d[UI.role] || {}; d[UI.role] = Object.assign({}, old, p, { last_seen: new Date().toISOString(), status_set_on: old.status !== p.status ? today() : old.status_set_on }); localStorage.setItem(DKEY, JSON.stringify(d)); Object.assign(ME, p); return; }
     const r = await X.sb.rpc('my_profile_save', { p_avatar: p.avatar || null, p_gender: p.gender || '', p_status: p.status, p_note: p.status_note || '', p_until: p.status_until || null });
     if (r.error) throw r.error;
     Object.assign(ME, p);
@@ -64,7 +68,24 @@
     } catch (e) { console.error(e); TEAM = TEAM || []; teamErr = e.message || String(e); }
     if (UI.view === 'team' && !X.typing()) X.render();
   }
-  function ping() { if (LIVE && X.sb && (canEdit() || UI.role === 'owner') && !document.hidden) X.sb.rpc('touch_presence').then(() => {}, () => {}); }
+  function demoCheckin() {
+    if (!canEdit() || !officeOpen()) return;
+    const d = demo(), p = d[UI.role] || {}, t = today();
+    p.last_seen = new Date().toISOString();
+    if (p.status_auto_on !== t) {
+      p.status_auto_on = t;
+      const onLeave = p.status === 'ooo' && (!p.status_until || p.status_until >= t);
+      if (!onLeave && p.status_set_on !== t && p.status && p.status !== 'available') { p.status = 'available'; p.status_note = null; p.status_until = null; Object.assign(ME, { status: 'available', status_note: null, status_until: null }); }
+    }
+    d[UI.role] = p; localStorage.setItem(DKEY, JSON.stringify(d));
+  }
+  function ping() {
+    if (document.hidden) return;
+    if (!LIVE) { const before = ME.status; demoCheckin(); if (ME.status !== before && !X.typing()) X.render(); return; }
+    if (!X.sb) return;
+    if (canEdit()) X.sb.rpc('auto_checkin').then((r) => { if (r && !r.error && r.data && r.data !== ME.status) { Object.assign(ME, { status: r.data }, r.data === 'available' ? { status_note: null, status_until: null } : {}); DRAFT = null; if (!X.typing()) X.render(); } }, () => {});
+    else if (UI.role === 'owner') X.sb.rpc('touch_presence').then(() => {}, () => {});
+  }
   setInterval(ping, 2 * 60 * 1000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) ping(); });
   setInterval(() => { if (UI.view === 'team' && !document.hidden && canSee()) loadTeam(); }, 60 * 1000);
@@ -79,7 +100,7 @@
     h += '<div class="prof-r"><table class="kv"><tr><td>Name</td><td><b>' + esc(name) + '</b></td></tr>' + (UI.user ? '<tr><td>Email</td><td>' + esc(UI.user) + '</td></tr>' : '') + '<tr><td>Role</td><td>' + esc(ROLE_L[UI.role] || UI.role) + '</td></tr><tr><td>Gender</td><td><select id="pf-gender"><option value="">Prefer not to say</option><option value="M"' + (d.gender === 'M' ? ' selected' : '') + '>Male</option><option value="F"' + (d.gender === 'F' ? ' selected' : '') + '>Female</option></select></td></tr></table><p class="mut" style="font-size:12px;margin:8px 0 0">Your name, email and role are set by the admin.</p></div></div>';
     h += '<div class="card"><h2 style="margin-top:0">Status</h2><div class="stgrid">' + Object.keys(ST).map((k) => '<button class="stopt' + (d.status === k ? ' on' : '') + '" data-act="pfStatus" data-s="' + k + '">' + pill(k) + '<small>' + ST_HINT[k] + '</small></button>').join('') + '</div>';
     h += '<div class="form" style="margin-top:14px"><label class="span2">What are you doing? (optional)<input id="pf-note" maxlength="120" value="' + esc(d.status_note || '') + '" placeholder="' + (d.status === 'ooo' ? 'On leave, back on Monday' : d.status === 'busy' ? 'Meeting with PepsiCo team' : 'At the Nestle site today') + '"></label><label>' + (d.status === 'available' ? 'Clear the note after' : 'Back on / clear after') + '<input type="date" id="pf-until" value="' + esc(d.status_until || '') + '" min="' + today() + '"></label></div>';
-    h += '<p style="margin:14px 0 0;display:flex;gap:8px"><button class="b pri" data-act="pfSave">Save</button><button class="b" data-act="pfReset">Undo changes</button></p></div>';
+    h += '<p class="mut" style="font-size:12px;margin:10px 0 0">Your status saves as soon as you click it. During office hours (9 AM to 5 PM, Monday to Saturday) you are set to Available the first time you open the system each day, unless you are on leave.</p><p style="margin:12px 0 0;display:flex;gap:8px"><button class="b pri" data-act="pfSave">Save</button><button class="b" data-act="pfReset">Undo changes</button></p></div>';
     return h;
   }
 
@@ -92,10 +113,18 @@
     if (teamErr) h += '<div class="banner" style="background:var(--bad-bg);color:var(--bad)"><b>Sorry for the inconvenience.</b> The team list could not be loaded. Please contact the developer. <small>' + esc(teamErr) + '</small></div>';
     h += '<div class="cards kpi">' + X.stat('Online now', on, 'ok') + X.stat('Available', c.available) + X.stat('Busy', c.busy) + X.stat('Away', c.away) + X.stat('Out of office', c.ooo) + '</div>';
     if (!list.length) return h + '<div class="card"><p class="mut">No staff logins yet.</p></div>';
-    h += '<div class="team">' + list.map((p) => '<div class="tm"><div class="tm-h">' + avatar(p, p.name || p.email, 56, false) + '<i class="pres ' + (online(p) ? 'on' : '') + '" title="' + (online(p) ? 'Online' : 'Offline') + '"></i><div><b>' + esc(p.name || p.email || '') + '</b><span>' + esc(ROLE_L[p.role] || p.role) + '</span></div></div>' + pill(p.status) + (p.status_note ? '<p class="tm-note">' + esc(p.status_note) + '</p>' : '') + (p.status_until ? '<p class="mut tm-until">' + (p.status === 'available' ? 'Until ' : 'Back ') + X.dmy(p.status_until) + '</p>' : '') + '<p class="tm-seen ' + (online(p) ? 'on' : '') + '">' + ago(p.last_seen) + '</p>' + (p.email ? '<a class="tm-mail" href="mailto:' + esc(p.email) + '">' + esc(p.email) + '</a>' : '') + '</div>').join('') + '</div>';
+    h += '<div class="team">' + list.map((p) => '<div class="tm"><div class="tm-h">' + avatar(p, p.name || p.email, 56, false) + '<i class="pres ' + (online(p) ? 'on' : '') + '" title="' + (online(p) ? 'Online' : 'Offline') + '"></i><div><b>' + esc(p.name || p.email || '') + '</b><span>' + esc(ROLE_L[p.role] || p.role) + '</span></div></div>' + (shown(p) === p.status ? pill(p.status) : '<span class="spill st-off"><i></i>' + shown(p) + '</span>') + (p.status_note ? '<p class="tm-note">' + esc(p.status_note) + '</p>' : '') + (p.status_until ? '<p class="mut tm-until">' + (p.status === 'available' ? 'Until ' : 'Back ') + X.dmy(p.status_until) + '</p>' : '') + '<p class="tm-seen ' + (online(p) ? 'on' : '') + '">' + ago(p.last_seen) + '</p>' + (p.email ? '<a class="tm-mail" href="mailto:' + esc(p.email) + '">' + esc(p.email) + '</a>' : '') + '</div>').join('') + '</div>';
     return h;
   }
 
+  // The status a person chose stays, but a stale one is labelled: nobody has seen them today, or the office is closed.
+  function shown(p) {
+    if (p.status === 'ooo' || online(p)) return p.status;
+    const seenToday = p.last_seen && X.docs.pkDay(new Date(p.last_seen)) === today();
+    if (!seenToday) return 'Not in today';
+    if (!officeOpen()) return 'Off hours';
+    return p.status;
+  }
   // ---------- photo: cut to a square and shrink, so it stays small ----------
   function shrink(file) {
     return new Promise((ok, no) => {
@@ -107,7 +136,15 @@
   }
   const readForm = () => { const g = $('#pf-gender'), n = $('#pf-note'), u = $('#pf-until'); if (g) DRAFT.gender = g.value; if (n) DRAFT.status_note = n.value.trim(); if (u) DRAFT.status_until = u.value || null; };
   Object.assign(A, {
-    pfStatus(el) { readForm(); DRAFT.status = el.dataset.s; if (el.dataset.s === 'available') DRAFT.status_until = null; X.render(); },
+    async pfStatus(el) {
+      readForm();
+      const s = el.dataset.s, clear = s === 'available';
+      if (s === ME.status) return;
+      // save only the status (and clear the old note when going back to Available); typed but unsaved changes stay on the form
+      await saveMe(Object.assign({}, ME, { status: s }, clear ? { status_note: null, status_until: null } : {}));
+      DRAFT.status = s; if (clear) { DRAFT.status_note = ''; DRAFT.status_until = null; }
+      X.render(); toast('Status: ' + ST[s][0] + '.');
+    },
     pfNoPhoto() { readForm(); DRAFT.avatar = null; X.render(); },
     pfReset() { DRAFT = null; X.render(); },
     async pfSave() {
