@@ -1,5 +1,4 @@
 STERLING ENGINEERING - PAYROLL, HR, ATTENDANCE AND PROCUREMENT - SETUP GUIDE (version 12)
-
 FILES
   index.html, app.js, logic.js, config.js   the system (payroll)
   hr.js                                     HR, live attendance, attendance register, letters, users and access
