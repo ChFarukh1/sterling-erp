@@ -1,8 +1,9 @@
 STERLING ENGINEERING - PAYROLL, HR, ATTENDANCE AND PROCUREMENT - SETUP GUIDE (version 12)
+
 FILES
   index.html, app.js, logic.js, config.js   the system (payroll)
   hr.js                                     HR, live attendance, attendance register, letters, users and access
-  proc.js                                   procurement: requests, RFQ,  h  quotations, comparison, approval, POs, deliveries, suppliers
+  proc.js                                   procurement: requests, RFQ, quotations, comparison, approval, POs, deliveries, suppliers
   templates.js                              company documents (offer, warning, experience, termination letters, RFQ, purchase order)
   logo.jpg, favicon.png                     company logo (upload these with the system)
   1_database_setup.sql                      run once in Supabase
@@ -254,3 +255,10 @@ VERSION 13.5: MENU KEEPS ITS PLACE, REFRESH ICONS
   Clicking an item lower down in the left menu no longer jumps the menu back to the top.
   The Refresh buttons (Live attendance, Team status, and Refresh data in the sidebar) are now a round
   refresh icon. Hovering over it still shows what it does.
+
+VERSION 13.6: BSP IS ONE SITE
+  3_merge_bsp.sql (run once in the SQL Editor) moves everything from BSP General Worker, CD Supply and
+  Painters into BSP (workers, attendance, salary runs, purchase requests and orders, site logins) and
+  deletes the three sub-sites. Running it again changes nothing.
+  Also: the "Adding a site login" box is removed from Users and access, and the "No employee matches"
+  note on HR letters now shows as a small popup instead of sitting over the form.

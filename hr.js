@@ -438,7 +438,6 @@
       h += '<tr><td>' + esc(u.name || '') + '</td><td>' + esc(u.email) + '</td><td>' + (u.role ? esc(RN[u.role] || u.role) : '<span class="pill p-warn">No access yet</span>') + '</td><td>' + esc((u.site_ids || []).map((id) => X.SITE[id] ? X.siteName(id) : '').filter(Boolean).join(', ')) + '</td><td>' + (!u.role ? '' : u.active === false ? '<span class="pill p-bad">Blocked</span>' : '<span class="pill p-ok">Active</span>') + '</td><td class="nowrap">' + (u.last_sign_in ? pkStamp(u.last_sign_in) : '<span class="mut">Never</span>') + '</td><td>' + (can && u.email !== UI.user ? '<button class="b sm" data-act="userEdit" data-id="' + u.id + '">' + (u.role ? 'Edit' : 'Give access') + '</button>' : '') + '</td></tr>';
     });
     h += '</table></div></div>';
-    h += '<div class="card"><h2 style="margin-top:0">Adding a site login</h2><p style="margin:0">Contact developer.</p></div>';
     return h;
   }
 
