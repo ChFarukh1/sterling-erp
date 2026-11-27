@@ -4,16 +4,19 @@
   const has = (v) => v !== null && v !== undefined && v !== '';
   const r2 = (v) => Math.round((num(v) + Number.EPSILON) * 100) / 100;
 
+  // Overtime rate per hour: the day rate divided by 8 working hours, unless a rate is typed for this line.
+  const autoOtRate = (rate) => (has(rate) && num(rate) > 0 ? r2(num(rate) / 8) : null);
+  const otRateOf = (l) => (has(l.ot_rate) ? num(l.ot_rate) : num(autoOtRate(l.rate)));
   // One salary line. A typed amount (days_amount, ot_amount, net_override) always wins over the calculation.
   function calcLine(l) {
     const daysCalc = num(l.days) * num(l.rate);
-    const otCalc = num(l.ot_hours) * num(l.ot_rate);
+    const otCalc = num(l.ot_hours) * otRateOf(l);
     const daysAmt = has(l.days_amount) ? num(l.days_amount) : daysCalc;
     const otAmt = has(l.ot_amount) ? num(l.ot_amount) : otCalc;
     const gross = daysAmt + otAmt + num(l.allowances);
     const netCalc = gross - num(l.advance) - num(l.deductions);
     const net = has(l.net_override) ? num(l.net_override) : netCalc;
-    return { daysCalc: r2(daysCalc), otCalc: r2(otCalc), daysAmt: r2(daysAmt), otAmt: r2(otAmt), gross: r2(gross), netCalc: r2(netCalc), net: r2(net) };
+    return { otRate: r2(otRateOf(l)), daysCalc: r2(daysCalc), otCalc: r2(otCalc), daysAmt: r2(daysAmt), otAmt: r2(otAmt), gross: r2(gross), netCalc: r2(netCalc), net: r2(net) };
   }
 
   const linePaid = (l) => has(l.paid_on);
@@ -279,7 +282,7 @@
     return lead + String(max + 1).padStart(width, '0');
   }
 
-  const api = { setCache: (on) => { cacheOn = !!on; CACHE = null; }, invalidate: () => { CACHE = null; }, linesOf, num, has, r2, calcLine, linePaid, runState, lastRun, sharedAccounts, byId, siteIdsUnder, topSite, siteLabel, rangesOverlap, filterRuns, payeeOf, hasAccount, channelOf, summarize, runTotals, runWarnings, buildPayments, advanceBalances, advanceSummary, paidThroughLoops, nextEmpCode, daysBetween };
+  const api = { setCache: (on) => { cacheOn = !!on; CACHE = null; }, invalidate: () => { CACHE = null; }, linesOf, num, has, r2, calcLine, autoOtRate, otRateOf, linePaid, runState, lastRun, sharedAccounts, byId, siteIdsUnder, topSite, siteLabel, rangesOverlap, filterRuns, payeeOf, hasAccount, channelOf, summarize, runTotals, runWarnings, buildPayments, advanceBalances, advanceSummary, paidThroughLoops, nextEmpCode, daysBetween };
   root.PL = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

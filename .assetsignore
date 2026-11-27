@@ -1,4 +1,5 @@
 1_database_setup.sql
+2_assign_roles.sql
 README.txt
 README.md
 sterling_import.json

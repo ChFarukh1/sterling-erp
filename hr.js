@@ -114,7 +114,7 @@
       catch (e) { M.letters = M.letters.filter((x) => x.id !== row.id); throw e; }
     },
     async staff() {
-      if (!LIVE) { if (!H.users.length) H.users = [{ id: uuid(), email: 'accounts@sterlingengineering.pk', name: 'Muhammad Wasif', role: 'admin', site_ids: [], active: true }, { id: uuid(), email: 'owner@sterlingengineering.pk', name: 'Haroon Iftikhar', role: 'owner', site_ids: [], active: true }, { id: uuid(), email: 'pepsico.site@sterlingengineering.pk', name: null, role: null, site_ids: [], active: false }]; return H.users; }
+      if (!LIVE) { if (!H.users.length) H.users = [['haroon.iftikhar@sterlingengineering.pk', 'Haroon Iftikhar', 'admin'], ['salik@sterlingengineering.pk', 'Salik', 'owner'], ['yaseenwasif509@gmail.com', 'Muhammad Wasif', 'accountant'], ['farhan.ali@sterlingengineering.pk', 'Farhan Ali', 'procurement'], ['hr@sterlingengineering.pk', 'HR', 'hr'], ['pepsico.site@sterlingengineering.pk', null, null]].map(([email, name, role]) => ({ id: uuid(), email: email, name: name, role: role, site_ids: [], active: !!role })); return H.users; }
       return check(await sb().rpc('staff_list'));
     },
     async setStaff(u) {
@@ -124,10 +124,11 @@
   };
 
   // ---------- attendance cache for the open screen ----------
-  const ATT = { key: '', rows: [], log: [], loading: false, at: null, err: '' };
+  const ATT = { key: '', rows: [], log: [], loading: false, at: null, err: '', stale: false };
   function attFor(from, to, withLog) {
     const key = from + '|' + to + (withLog ? '|log' : '');
-    if (ATT.key === key) return ATT.rows;
+    if (ATT.key === key && !ATT.stale) return ATT.rows;
+    if (ATT.key === key) { if (!ATT.loading) loadAtt(from, to, withLog, key); return ATT.rows; } // show what we have while fresh marks load
     if (!ATT.loading) loadAtt(from, to, withLog, key);
     return null;
   }
@@ -135,17 +136,17 @@
     ATT.loading = true; ATT.err = '';
     try {
       const [rows, log] = await Promise.all([DB.attRange(from, to), withLog ? DB.attLog(from === to ? from : null) : Promise.resolve([])]);
-      ATT.rows = rows; ATT.log = log; ATT.key = key; ATT.at = new Date();
+      ATT.rows = rows; ATT.log = log; ATT.key = key; ATT.at = new Date(); ATT.stale = false;
     } catch (e) { console.error(e); ATT.err = e.message || String(e); ATT.key = key; ATT.rows = []; }
     finally { ATT.loading = false; }
     if (['attlive', 'attsheet'].includes(UI.view) && !X.typing()) X.render();
   }
-  const reloadAtt = () => { ATT.key = ''; if (['attlive', 'attsheet'].includes(UI.view) && !X.typing()) X.render(); };
+  const reloadAtt = () => { ATT.stale = true; if (['attlive', 'attsheet'].includes(UI.view) && !X.typing()) X.render(); };
   const markMap = (rows, day) => { const m = {}; rows.forEach((a) => { if (!day || a.day === day) m[a.employee_id] = a; }); return m; };
 
   // ---------- live updates ----------
   let chan = null, lastAttStamp = null, bumpTimer = null;
-  function bump() { clearTimeout(bumpTimer); bumpTimer = setTimeout(() => { if (!['attlive', 'attsheet'].includes(UI.view)) { ATT.key = ''; return; } if (X.typing()) return bump(); ATT.key = ''; X.render(); }, 700); }
+  function bump() { clearTimeout(bumpTimer); bumpTimer = setTimeout(() => { ATT.stale = true; if (!['attlive', 'attsheet'].includes(UI.view)) return; if (X.typing()) return bump(); X.render(); }, 700); }
   function subscribe() {
     if (!LIVE || chan || !staffRole() || !sb()) return;
     try { chan = sb().channel('attendance-live').on('postgres_changes', { event: '*', schema: 'public', table: 'attendance' }, bump).subscribe((st) => { UI.attRealtime = st === 'SUBSCRIBED'; }); } catch (e) { console.error(e); }
@@ -397,14 +398,14 @@
   // ---------- Users and access ----------
   let STAFF = null, staffErr = '';
   async function loadStaff() { try { STAFF = await DB.staff(); staffErr = ''; } catch (e) { STAFF = []; staffErr = e.message || String(e); } if (UI.view === 'users') X.render(); }
-  const RN = { admin: 'Accountant (full access)', owner: 'Owner (view only, approves purchases)', hr: 'HR', procurement: 'Procurement', site: 'Site attendance' };
+  const RN = { admin: 'Admin (full access)', accountant: 'Accountant (payroll only)', owner: 'Owner (views all, approves purchases)', hr: 'HR', procurement: 'Procurement', site: 'Site attendance' };
   function siteChecks(sel) {
     sel = new Set(sel || []);
     return '<div class="chks">' + X.sortedSites().filter((s) => s.active !== false).map((s) => '<label class="' + (s.parent_id ? 'kid' : '') + '"><input type="checkbox" data-site="' + s.id + '"' + (sel.has(s.id) ? ' checked' : '') + '> ' + esc(X.siteName(s.id)) + '</label>').join('') + '</div>';
   }
   function vUsers() {
     if (STAFF === null) { loadStaff(); return pageHead('Users and access') + '<div class="card"><p class="mut">Loading…</p></div>'; }
-    const admin = X.isAdmin();
+    const admin = X.isSys();
     let h = pageHead('Users and access', 'Who can sign in, what each person can do, and which sites a site login can mark.');
     if (staffErr) h += '<div class="banner" style="background:var(--bad-bg);color:var(--bad)">Could not load users: ' + esc(staffErr) + '. Run 1_database_setup.sql again if the database was not updated.</div>';
     const ed = UI.userEdit && STAFF.find((u) => u.id === UI.userEdit);
@@ -500,7 +501,7 @@
     async hrAllP(el) {
       const day = UI.attDay, marks = markMap(ATT.rows, day), list = S.employees.filter((e) => (e.site_id || 'none') === el.dataset.id && e.active !== false && !marks[e.id] && !(e.joining_date && e.joining_date > day));
       await DB.attSet(list.map((e) => ({ employee_id: e.id, day: day, status: 'P' })));
-      ATT.key = ''; X.render(); toast(list.length + ' marked Present.');
+      ATT.stale = true; X.render(); toast(list.length + ' marked Present.');
     },
     regEdit(el) { UI.regEdit = { emp: el.dataset.emp, day: el.dataset.day }; X.render(); },
     regEditClose() { UI.regEdit = null; X.render(); },
@@ -628,7 +629,7 @@
   const hrLoader = async () => {
     if (!LIVE) loadDemo();
     if (UI.role === 'site') { if (!LIVE && !(UI.demoSites || []).length) { const top = X.sortedSites().find((s) => !s.parent_id && S.employees.some((e) => PL.siteIdsUnder(S.sites, s.id).has(e.site_id))); UI.demoSites = top ? [top.id] : []; } await siteLoad(true); return; }
-    await DB.meta(); ATT.key = ''; subscribe();
+    await DB.meta(); ATT.stale = true; subscribe();
   };
   EXT.loaders.push(hrLoader);
   EXT.onRole = () => { ATT.key = ''; STAFF = null; if (UI.role === 'site') { SA.data = null; hrLoader(); } };

@@ -25,7 +25,9 @@
   const period = (r) => (r.date_from && r.date_to ? dmy(r.date_from) + ' to ' + dmy(r.date_to) : '<span class="pill p-warn">Dates not set</span>');
   const numOrNull = (v) => { const t = String(v === null || v === undefined ? '' : v).replace(/,/g, '').trim(); if (t === '') return null; const n = Number(t); return isNaN(n) ? null : n; };
   const strOrNull = (v) => { const t = String(v === null || v === undefined ? '' : v).trim(); return t === '' ? null : t; };
-  const isAdmin = () => UI.role === 'admin';
+  // isAdmin: may run payroll (admin and accountant). isSys: the whole system, logins and settings (admin only).
+  const isAdmin = () => UI.role === 'admin' || UI.role === 'accountant';
+  const isSys = () => UI.role === 'admin';
   const isHR = () => UI.role === 'hr';
   const canHR = () => UI.role === 'admin' || UI.role === 'hr';
   const index = () => { PL.invalidate(); SITE = PL.byId(S.sites); EMP = PL.byId(S.employees); RUN = PL.byId(S.runs); ADV = {}; PL.advanceBalances(S).forEach((b) => { ADV[b.employee_id] = b.balance; }); };
@@ -277,7 +279,7 @@
     const inp = (f, ph) => '<input' + (ph !== undefined && PL.has(l[f]) ? ' class="typed" title="Typed by hand. Clear the box to use the calculation."' : '') + ' data-chg="line" data-id="' + l.id + '" data-f="' + f + '" value="' + esc(PL.has(l[f]) ? PL.r2(l[f]) : '') + '" placeholder="' + (ph === undefined ? '' : ph) + '" inputmode="decimal" aria-label="' + f.replace(/_/g, ' ') + '"' + d + '>';
     const paidCell = admin ? '<label class="nowrap" style="display:flex;gap:5px;align-items:center"><input type="checkbox" style="width:auto" data-chg="linePaid" data-id="' + l.id + '"' + (paid ? ' checked' : '') + ' aria-label="paid">' + (paid ? dmy(l.paid_on) : '') + '</label>' : (paid ? '<span class="pill p-ok">' + dmy(l.paid_on) + '</span>' : '');
     return '<tr id="ln-' + l.id + '"><td class="nowrap">' + esc(e.emp_code || '') + '</td><td>' + esc(e.name) + '<small>' + esc(e.designation || '') + '</small></td>' +
-      '<td>' + inp('days') + '</td><td>' + inp('rate') + '</td><td>' + inp('days_amount', fmt(c.daysCalc)) + '</td><td>' + inp('ot_hours') + '</td><td>' + inp('ot_rate') + '</td><td>' + inp('ot_amount', fmt(c.otCalc)) + '</td><td>' + inp('allowances') + '</td>' +
+      '<td>' + inp('days') + '</td><td>' + inp('rate') + '</td><td>' + inp('days_amount', fmt(c.daysCalc)) + '</td><td>' + inp('ot_hours') + '</td><td>' + inp('ot_rate', PL.has(PL.autoOtRate(l.rate)) ? fmt(PL.autoOtRate(l.rate)) : undefined) + '</td><td>' + inp('ot_amount', fmt(c.otCalc)) + '</td><td>' + inp('allowances') + '</td>' +
       '<td class="num" data-cell="gross">' + fmt(c.gross) + '</td><td>' + inp('advance') + '<div class="advh" id="adv-' + l.id + '">' + advHint(l, ro) + '</div></td><td>' + inp('deductions') + '</td><td>' + inp('net_override', fmt(c.netCalc)) + '</td>' +
       '<td class="num" data-cell="net"><b' + (c.net < 0 ? ' style="color:var(--bad)"' : '') + '>' + fmt(c.net) + '</b></td><td>' + paidCell + '</td><td>' + payBadge(EMP[l.employee_id]) + '</td>' +
       '<td><input class="note" data-chg="line" data-id="' + l.id + '" data-f="note" value="' + esc(l.note || '') + '" aria-label="note"' + d + '></td>' +
@@ -316,7 +318,7 @@
   }
   function newLine(run, e) {
     const monthly = e.rate_type === 'monthly';
-    return { id: uuid(), run_id: run.id, employee_id: e.id, days: null, rate: monthly ? null : (PL.has(e.rate) ? e.rate : null), days_amount: monthly && PL.has(e.rate) ? e.rate : null, ot_hours: null, ot_rate: PL.has(e.ot_rate) ? e.ot_rate : null, ot_amount: null, allowances: null, advance: null, deductions: null, net_override: null, note: null, paid_on: null };
+    return { id: uuid(), run_id: run.id, employee_id: e.id, days: null, rate: monthly ? null : (PL.has(e.rate) ? e.rate : null), days_amount: monthly && PL.has(e.rate) ? e.rate : null, ot_hours: null, ot_rate: PL.has(e.ot_rate) && (monthly || PL.r2(e.ot_rate) !== PL.autoOtRate(e.rate)) ? e.ot_rate : null, ot_amount: null, allowances: null, advance: null, deductions: null, net_override: null, note: null, paid_on: null };
   }
   // The run's own status follows its lines: paid only when every employee in it is paid.
   async function syncRun(runId) {
@@ -336,7 +338,7 @@
     let h = '<div class="slip"><div class="slip-h"><div><b style="font-size:17px">Sterling Engineering</b><div class="mut">Salary slip</div></div><div style="text-align:right"><b>' + esc(siteName(r.site_id)) + '</b><div class="mut">' + (r.date_from && r.date_to ? dmy(r.date_from) + ' to ' + dmy(r.date_to) : esc(r.label || '')) + '</div></div></div>';
     h += '<table><tr><td class="mut">Employee</td><td><b>' + esc(e.name) + '</b></td><td class="mut">Code</td><td>' + esc(e.emp_code || '') + '</td></tr><tr><td class="mut">Designation</td><td>' + esc(e.designation || '') + '</td><td class="mut">Days</td><td>' + (PL.has(l.days) ? PL.r2(l.days) : '') + '</td></tr></table>';
     h += '<table><tr><th>Earnings</th><th></th><th class="num">PKR</th></tr>' + row('Salary for days worked', typedDays || !PL.has(l.rate) ? 'Fixed amount' : PL.r2(l.days) + ' days × ' + fmt(l.rate), fmt(c.daysAmt));
-    if (c.otAmt) h += row('Overtime', typedOt || !PL.has(l.ot_rate) ? '' : PL.r2(l.ot_hours) + ' hours × ' + fmt(l.ot_rate), fmt(c.otAmt));
+    if (c.otAmt) h += row('Overtime', typedOt || !c.otRate ? '' : PL.r2(l.ot_hours) + ' hours × ' + fmt(c.otRate), fmt(c.otAmt));
     if (PL.num(l.allowances)) h += row('Allowances', '', fmt(l.allowances));
     h += '<tr class="tot"><td>Gross</td><td></td><td class="num">' + fmt(c.gross) + '</td></tr><tr><th>Deductions</th><th></th><th></th></tr>' + row('Advance', '', fmt(l.advance)) + row('Mess and other deductions', '', fmt(l.deductions));
     if (Math.abs(c.net - c.netCalc) > 0.01) h += row('Adjustment', '', fmt(c.net - c.netCalc));
@@ -381,7 +383,7 @@
       dt('joining_date', 'Joining date') + dt('leaving_date', 'Leaving date') + txt('leaving_reason', 'Reason for leaving') + txt('emergency_contact', 'Emergency contact', 'Name and phone') + txt('address', 'Address', '', 'full');
     if (isAdmin()) h += '<div class="full sec-h">Pay</div>' +
       '<label>Pay basis<select name="rate_type"><option value="daily"' + sel('daily', e.rate_type || 'daily') + '>Per day</option><option value="monthly"' + sel('monthly', e.rate_type) + '>Fixed amount per run</option></select></label>' +
-      '<label>Rate (PKR)<input name="rate" inputmode="decimal" value="' + esc(PL.has(e.rate) ? e.rate : '') + '"></label><label>Overtime rate per hour<input name="ot_rate" inputmode="decimal" value="' + esc(PL.has(e.ot_rate) ? e.ot_rate : '') + '"></label>' +
+      '<label>Rate (PKR)<input name="rate" inputmode="decimal" value="' + esc(PL.has(e.rate) ? e.rate : '') + '"></label><label>Overtime rate per hour<input name="ot_rate" inputmode="decimal" value="' + esc(PL.has(e.ot_rate) ? e.ot_rate : '') + '" placeholder="Leave empty: day rate \u00f7 8"></label>' +
       '<div class="full sec-h">Bank or wallet details</div>' +
       '<label>Paid through<select name="paid_through"><option value="">His own account</option>' + others.map((x) => '<option value="' + x.id + '"' + (x.id === e.paid_through ? ' selected' : '') + '>' + esc(x.name + (x.emp_code ? ' (' + x.emp_code + ')' : '')) + '</option>').join('') + '</select></label>' +
       '<label>Pay method<select name="pay_method" data-chg="empFormMethod"><option value=""' + sel('', e.pay_method) + '>Not set</option><option value="UBL"' + sel('UBL', e.pay_method) + '>UBL account</option><option value="Bank"' + sel('Bank', e.pay_method) + '>Other bank</option><option value="Wallet"' + sel('Wallet', e.pay_method) + '>Mobile wallet</option></select></label>' +
@@ -587,7 +589,7 @@
     const set = new Set(runs.map((r) => r.id));
     return S.run_lines.filter((l) => set.has(l.run_id)).map((l) => {
       const e = EMP[l.employee_id] || {}, r = RUN[l.run_id], c = PL.calcLine(l), p = PL.payeeOf(EMP, e);
-      return { Site: siteName(r.site_id), Run: r.label || '', From: r.date_from || '', To: r.date_to || '', Code: e.emp_code || '', Name: e.name || '', Designation: e.designation || '', Days: l.days, 'Rate per day': l.rate, 'Days amount': c.daysAmt, 'OT hours': l.ot_hours, 'OT rate': l.ot_rate, 'OT amount': c.otAmt, Allowances: PL.num(l.allowances), Gross: c.gross, Advance: PL.num(l.advance), 'Mess / deductions': PL.num(l.deductions), 'Net to pay': c.net, 'Paid to': p.account_title || p.name || '', 'Bank or wallet': p.bank || '', Account: p.account_no || '', Status: l.paid_on ? 'Paid ' + l.paid_on : 'Pending', Note: l.note || '' };
+      return { Site: siteName(r.site_id), Run: r.label || '', From: r.date_from || '', To: r.date_to || '', Code: e.emp_code || '', Name: e.name || '', Designation: e.designation || '', Days: l.days, 'Rate per day': l.rate, 'Days amount': c.daysAmt, 'OT hours': l.ot_hours, 'OT rate': c.otRate || '', 'OT amount': c.otAmt, Allowances: PL.num(l.allowances), Gross: c.gross, Advance: PL.num(l.advance), 'Mess / deductions': PL.num(l.deductions), 'Net to pay': c.net, 'Paid to': p.account_title || p.name || '', 'Bank or wallet': p.bank || '', Account: p.account_no || '', Status: l.paid_on ? 'Paid ' + l.paid_on : 'Pending', Note: l.note || '' };
     });
   }
   const empSheetRows = () => S.employees.map((e) => ({ 'Emp code': e.emp_code || '', Name: e.name, Site: siteName(e.site_id), Designation: e.designation || '', 'Pay method (UBL / Bank / Wallet)': e.pay_method || '', 'Bank or wallet': e.bank || '', 'Account number': e.account_no || '', 'Account title': e.account_title || '', 'Paid through (emp code)': e.paid_through && EMP[e.paid_through] ? EMP[e.paid_through].emp_code || '' : '' }));
@@ -627,10 +629,10 @@
     ['People', [['employees', 'Employees', 'users']]],
     ['Administration', [['sites', 'Sites', 'pin'], ['history', 'Change history', 'clock'], ['backup', 'Backup and import', 'db']]]
   ];
-  const ROLE_VIEWS = { owner: ['dashboard', 'runs', 'advances', 'reports', 'history', 'payslip'], hr: ['employees'], procurement: [] };
-  const ROLE_NAME = { admin: 'Accountant', owner: 'Owner · view only', hr: 'HR', procurement: 'Procurement', site: 'Site attendance' };
+  const ROLE_VIEWS = { owner: ['dashboard', 'runs', 'advances', 'reports', 'history', 'payslip'], accountant: ['dashboard', 'runs', 'payslip', 'payments', 'advances', 'bank', 'reports', 'employees', 'sites', 'history'], hr: ['employees'], procurement: [] };
+  const ROLE_NAME = { admin: 'Admin', accountant: 'Accountant', owner: 'Owner', hr: 'HR', procurement: 'Procurement', site: 'Site attendance' };
   const VIEWS = { dashboard: vDashboard, runs: vRuns, employees: vEmployees, bank: vBank, advances: vAdvances, payments: vPayments, sites: vSites, reports: vReports, history: vHistory, payslip: vPayslip, backup: vBackup };
-  const allowed = (v) => !!(VIEWS[v] || EXT.views[v]) && (isAdmin() || (ROLE_VIEWS[UI.role] || []).concat(EXT.roleViews[UI.role] || []).includes(v));
+  const allowed = (v) => !!(VIEWS[v] || EXT.views[v]) && (isSys() || (ROLE_VIEWS[UI.role] || []).concat(EXT.roleViews[UI.role] || []).includes(v));
   const homeView = () => (UI.role === 'hr' ? 'attlive' : UI.role === 'procurement' ? 'proc' : 'dashboard');
   function navHtml() {
     const groups = NAV.map((g) => [g[0], g[1].slice()]);
@@ -641,9 +643,29 @@
       return '<div class="nav-g">' + g[0] + '</div>' + items.map((n) => '<button data-act="nav" data-v="' + n[0] + '"' + (UI.view === n[0] || (UI.view === 'payslip' && n[0] === 'runs') ? ' class="on"' : '') + '>' + icon(n[2]) + '<span>' + n[1] + '</span></button>').join('');
     }).join('');
   }
+  // Keep the screen where it was after a redraw: the item last clicked stays at the same place on screen,
+  // and boxes with their own scroll (wide tables, the attendance grid) keep their position.
+  let lastEl = null;
+  ['pointerdown', 'change', 'keydown'].forEach((t) => document.addEventListener(t, (ev) => { if (ev.target && ev.target.closest) lastEl = ev.target.closest('[id],[data-act],[data-chg],[data-inp],[data-it],[data-f]') || ev.target; }, true));
+  function anchorOf(el) {
+    if (!el || !el.isConnected) return null;
+    if (el.id) return '#' + CSS.escape(el.id);
+    const keys = ['act', 'chg', 'inp', 'id', 'st', 'day', 'emp', 'f', 'i', 't', 'd', 'v'].filter((k) => el.dataset[k] !== undefined);
+    if (!keys.length) return null;
+    return keys.map((k) => '[data-' + k + '="' + CSS.escape(el.dataset[k]) + '"]').join('');
+  }
+  function paint(html) {
+    const app = $('#app'), sel = anchorOf(lastEl), top = sel && lastEl.isConnected ? lastEl.getBoundingClientRect().top : null;
+    const boxes = Array.from(app.querySelectorAll('.scroll,.reg-wrap,.sa-chips')).map((b) => [b.scrollLeft, b.scrollTop]);
+    const y = window.scrollY;
+    app.innerHTML = html;
+    window.scrollTo(0, y);
+    Array.from(app.querySelectorAll('.scroll,.reg-wrap,.sa-chips')).forEach((b, i) => { if (boxes[i]) { b.scrollLeft = boxes[i][0]; b.scrollTop = boxes[i][1]; } });
+    if (sel && top !== null) { let now = null; try { now = app.querySelector(sel); } catch (e) { /* odd selector: keep the page scroll */ } if (now) { const d = now.getBoundingClientRect().top - top; if (Math.abs(d) > 1) window.scrollBy(0, d); lastEl = now; } }
+  }
   function render() {
     index();
-    if (UI.role === 'site' && EXT.siteApp) { $('#app').innerHTML = EXT.siteApp(); return; }
+    if (UI.role === 'site' && EXT.siteApp) { paint(EXT.siteApp()); return; }
     if (!allowed(UI.view)) UI.view = allowed(homeView()) ? homeView() : 'dashboard';
     const initials = (UI.name || UI.user || 'D').split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
     const who = LIVE ? '<div class="me"><span class="av">' + esc(initials) + '</span><div><div class="who"' + (UI.name ? ' title="' + esc(UI.user || '') + '"' : '') + '>' + esc(UI.name || UI.user || '') + '</div><span class="role">' + (ROLE_NAME[UI.role] || UI.role) + '</span></div></div><button data-act="refresh">Refresh data</button><button data-act="changePw">Change password</button><button data-act="logout">Sign out</button>' : '<span class="role">Demo mode</span>';
@@ -651,9 +673,8 @@
     if (!LIVE) h += '<div class="banner"><span><b>Demo mode.</b> Data is kept only in this browser until the system is connected to the database.</span><span class="right">View as <select data-chg="role">' + Object.keys(ROLE_NAME).map((r) => '<option value="' + r + '"' + (UI.role === r ? ' selected' : '') + '>' + ROLE_NAME[r] + '</option>').join('') + '</select></span></div>';
     if (UI.schemaOld) h += '<div class="banner" style="background:var(--bad-bg);color:var(--bad)"><b>The database needs an update.</b> Run 1_database_setup.sql again in Supabase, SQL Editor, then reload this page. Until then, saving will fail. Your data is kept.</div>';
     h += (VIEWS[UI.view] || EXT.views[UI.view])() + '</main></div>';
-    const y = window.scrollY, ae = document.activeElement, af = ae && ae.dataset && ae.dataset.inp ? ae.id : '';
-    $('#app').innerHTML = h;
-    window.scrollTo(0, y);
+    const ae = document.activeElement, af = ae && ae.dataset && ae.dataset.inp ? ae.id : '';
+    paint(h);
     if (af) { const el = document.getElementById(af); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }
   }
   const authPage = (inner) => '<div class="auth"><div class="auth-brand"><img src="logo.jpg" alt="Sterling Engineering and Construction"><h1>Sterling Engineering<br>and Construction</h1><p>Payroll, HR and site attendance</p></div><div class="auth-form"><div class="auth-box">' + inner + '</div></div></div>';
@@ -832,9 +853,12 @@
       const val = f === 'note' ? strOrNull(el.value) : numOrNull(el.value);
       if (f !== 'note' && el.value.trim() !== '' && val === null) { toast('That is not a number.'); el.value = PL.has(l[f]) ? l[f] : ''; return; }
       const n = Object.assign({}, l, { [f]: val });
+      if (f === 'rate' && PL.has(l.ot_rate) && PL.r2(l.ot_rate) === PL.autoOtRate(l.rate)) n.ot_rate = null; // it was the automatic rate, so it follows
       const p = save('run_lines', n);
       const tr = $('#ln-' + n.id), c = PL.calcLine(n);
       if (tr) {
+        const ob = tr.querySelector('[data-f=ot_rate]'), auto = PL.autoOtRate(n.rate);
+        if (ob) { ob.placeholder = PL.has(auto) ? fmt(auto) : ''; if (!PL.has(n.ot_rate) && document.activeElement !== ob) ob.value = ''; ob.classList.toggle('typed', PL.has(n.ot_rate) && PL.has(auto)); }
         tr.querySelector('[data-f=days_amount]').placeholder = fmt(c.daysCalc); tr.querySelector('[data-f=ot_amount]').placeholder = fmt(c.otCalc); tr.querySelector('[data-f=net_override]').placeholder = fmt(c.netCalc);
         tr.querySelector('[data-cell=gross]').textContent = fmt(c.gross);
         tr.querySelector('[data-cell=net]').innerHTML = '<b' + (c.net < 0 ? ' style="color:var(--bad)"' : '') + '>' + fmt(c.net) + '</b>';
@@ -879,7 +903,7 @@
         seen.add(e.id);
         const n = newLine(run, e);
         if (PL.has(l.rate)) n.rate = l.rate;
-        if (PL.has(l.ot_rate)) n.ot_rate = l.ot_rate;
+        if (PL.has(l.ot_rate) && PL.r2(l.ot_rate) !== PL.autoOtRate(n.rate)) n.ot_rate = l.ot_rate;
         if (!PL.has(l.rate) && PL.has(l.days_amount)) n.days_amount = l.days_amount;
         n.allowances = l.allowances; n.deductions = l.deductions;
         lines.push(n);
@@ -986,7 +1010,7 @@
   if (LIVE) setInterval(autoRefresh, Math.max(1, Number(cfg.refreshSeconds) || 45) * 1000);
 
   // ---------- interface for other modules ----------
-  window.SEC = { S, UI, PL, EXT, A, C, LIVE, cfg, get sb() { return sb; }, $, esc, fmt, fmt0, dmy, uuid, today, toast, fail, numOrNull, strOrNull, save, saveMany, remove, render, index, siteName, siteOptions, sortedSites, leafSites, stat, xlsxOut, download, isAdmin, isHR, canHR, icon, typing, refreshData, get EMP() { return EMP; }, get SITE() { return SITE; }, get RUN() { return RUN; }, startApp: () => start().catch((e) => { console.error(e); $('#app').innerHTML = '<p style="padding:24px">Could not start: ' + esc(e.message || e) + '</p>'; }) };
+  window.SEC = { S, UI, PL, EXT, A, C, LIVE, cfg, get sb() { return sb; }, $, esc, fmt, fmt0, dmy, uuid, today, toast, fail, numOrNull, strOrNull, save, saveMany, remove, render, index, siteName, siteOptions, sortedSites, leafSites, stat, xlsxOut, download, isAdmin, isSys, isHR, canHR, icon, typing, refreshData, get EMP() { return EMP; }, get SITE() { return SITE; }, get RUN() { return RUN; }, startApp: () => start().catch((e) => { console.error(e); $('#app').innerHTML = '<p style="padding:24px">Could not start: ' + esc(e.message || e) + '</p>'; }) };
 
   // ---------- start ----------
   let recovering = false;

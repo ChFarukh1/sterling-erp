@@ -288,7 +288,7 @@
       if (c.lowest && q && c.lowest.id !== q.id) h += '<div class="banner">This is not the lowest offer. Lowest complete offer: ' + esc(sup(c.lowest.supplier_id).name) + ', PKR ' + money(c.tot[c.lowest.id].pkr) + '.</div>';
       if (q && q.technical && q.technical !== 'compliant') h += '<div class="banner" style="background:var(--bad-bg);color:var(--bad)">The recommended offer is marked ' + (q.technical === 'partial' ? 'partly compliant' : 'not compliant') + ' technically.</div>';
       if (r.approval_status === 'pending' && canApprove()) h += '<div class="form" style="margin-top:12px"><label class="full">Note (optional)<input id="ap-note" placeholder="Approved, negotiate 2% more if possible"></label></div><p style="margin:12px 0 0;display:flex;gap:8px"><button class="b pri" data-act="pDecide" data-d="approved">Approve</button><button class="b danger" data-act="pDecide" data-d="rejected">Reject and send back</button><button class="b" data-act="pTab" data-t="compare">See the full comparison</button></p>';
-      else if (r.approval_status === 'pending') h += '<p class="mut">Waiting for the owner or the accountant to approve.' + (isProc() ? ' <button class="link" data-act="pWithdraw">Withdraw to make changes</button>' : '') + '</p>';
+      else if (r.approval_status === 'pending') h += '<p class="mut">Waiting for the owner or the admin to approve.' + (isProc() ? ' <button class="link" data-act="pWithdraw">Withdraw to make changes</button>' : '') + '</p>';
       if (r.approval_status !== 'pending' && r.approval_by) h += '<p>' + (r.approval_status === 'approved' ? 'Approved' : 'Rejected') + ' by <b>' + esc(r.approval_by) + '</b> on ' + D().pkStamp(r.approval_at) + (r.approval_note ? ': ' + esc(r.approval_note) : '') + '</p>';
       if (r.approval_status === 'rejected' && isProc()) h += '<p class="mut">Make the changes on the Quotations or Comparison tab, then send it again.</p>';
     }
@@ -522,7 +522,7 @@
     if (send) { r.approval_status = 'pending'; r.stage = 'approval'; r.approval_note = null; }
     await put('requests', r);
     if (send) { await ev({ request_id: r.id, kind: 'Sent for approval', note: sup(q.supplier_id).name + ', PKR ' + money(quoteTotals(q, r).pkr) + (r.recommendation ? '. ' + r.recommendation : '') }); UI.prTab = 'approval'; }
-    X.render(); toast(send ? 'Sent for approval. The owner and the accountant see it on their Procurement page.' : 'Saved.');
+    X.render(); toast(send ? 'Sent for approval. The owner and the admin see it on their Procurement page.' : 'Saved.');
   }
   Object.assign(C, {
     async pFile(el) {

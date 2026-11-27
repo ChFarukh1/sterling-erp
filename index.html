@@ -152,8 +152,14 @@ table.kv td:first-child{color:var(--mut);width:34%;white-space:nowrap}
 <body>
 <div id="app"><p style="padding:24px">Loading…</p></div>
 <div id="toast" role="status"></div>
+<!-- Libraries: if one site is blocked or slow on this network, the next one is tried -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>window.supabase || document.write('<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"><\/script>');</script>
+<script>window.supabase || document.write('<script src="https://fastly.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"><\/script>');</script>
+<script>window.supabase || document.write('<script src="https://esm.sh/@supabase/supabase-js@2/dist/umd/supabase.js"><\/script>');</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>window.XLSX || document.write('<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"><\/script>');</script>
+<script>window.XLSX || document.write('<script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"><\/script>');</script>
 <script src="config.js"></script>
 <script>window.SEC_WAIT_FOR_MODULES = true;</script>
 <script src="logic.js?v=12"></script>

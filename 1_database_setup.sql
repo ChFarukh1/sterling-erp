@@ -170,18 +170,30 @@ create policy changes_insert on public.changes for insert to authenticated with 
 -- =====================================================================================
 
 alter table public.profiles drop constraint if exists profiles_role_check;
-alter table public.profiles add constraint profiles_role_check check (role in ('admin', 'owner', 'hr', 'site', 'procurement'));
+alter table public.profiles add constraint profiles_role_check check (role in ('admin', 'accountant', 'owner', 'hr', 'site', 'procurement'));
 alter table public.profiles add column if not exists site_ids uuid[] not null default '{}';
 alter table public.profiles add column if not exists active boolean not null default true;
 
--- Site logins never read the payroll tables. Only admin, owner and HR do.
+-- Site logins and procurement never read the payroll tables. Admin, accountant, owner and HR do.
 create or replace function public.has_access() returns boolean
 language sql stable security definer set search_path = public as
-$$ select exists (select 1 from public.profiles where id = auth.uid() and active and role in ('admin', 'owner', 'hr')) $$;
+$$ select exists (select 1 from public.profiles where id = auth.uid() and active and role in ('admin', 'accountant', 'owner', 'hr')) $$;
 
+-- "is_admin" is the payroll permission: the admin and the accountant can change payroll, employees' pay and bank details.
+-- Logins, HR letters, attendance changes and procurement are checked separately and exclude the accountant.
 create or replace function public.is_admin() returns boolean
 language sql stable security definer set search_path = public as
+$$ select exists (select 1 from public.profiles where id = auth.uid() and active and role in ('admin', 'accountant')) $$;
+
+-- the whole system: logins and settings
+create or replace function public.is_sysadmin() returns boolean
+language sql stable security definer set search_path = public as
 $$ select exists (select 1 from public.profiles where id = auth.uid() and active and role = 'admin') $$;
+
+-- who may read HR letters
+create or replace function public.hr_view() returns boolean
+language sql stable security definer set search_path = public as
+$$ select exists (select 1 from public.profiles where id = auth.uid() and active and role in ('admin', 'owner', 'hr')) $$;
 
 create or replace function public.is_hr() returns boolean
 language sql stable security definer set search_path = public as
@@ -203,8 +215,8 @@ alter table public.employees add column if not exists emergency_contact text;
 -- HR may add and edit employees, but pay and bank details stay with the accountant.
 drop policy if exists employees_insert on public.employees;
 drop policy if exists employees_update on public.employees;
-create policy employees_insert on public.employees for insert to authenticated with check (public.is_hr());
-create policy employees_update on public.employees for update to authenticated using (public.is_hr()) with check (public.is_hr());
+create policy employees_insert on public.employees for insert to authenticated with check (public.is_hr() or public.is_admin());
+create policy employees_update on public.employees for update to authenticated using (public.is_hr() or public.is_admin()) with check (public.is_hr() or public.is_admin());
 create or replace function public.employees_guard() returns trigger
 language plpgsql security definer set search_path = public as
 $$ begin
@@ -309,6 +321,9 @@ begin
     execute format('create policy %I on public.%I for all to authenticated using (public.is_hr()) with check (public.is_hr())', t || '_write', t);
   end loop;
 end $$;
+-- HR letters: only admin, owner and HR read them (not the accountant)
+drop policy if exists hr_letters_read on public.hr_letters;
+create policy hr_letters_read on public.hr_letters for select to authenticated using (public.hr_view());
 alter table public.attendance_log enable row level security;
 drop policy if exists attendance_log_read on public.attendance_log;
 create policy attendance_log_read on public.attendance_log for select to authenticated using (public.has_access());
@@ -415,7 +430,7 @@ $$ declare me text; cur text;
 begin
   select role into me from public.profiles where id = auth.uid() and active;
   if me is null or me not in ('admin', 'hr') then raise exception 'Not allowed'; end if;
-  if p_role not in ('admin', 'owner', 'hr', 'site', 'procurement') then raise exception 'Unknown role'; end if;
+  if p_role not in ('admin', 'accountant', 'owner', 'hr', 'site', 'procurement') then raise exception 'Unknown role'; end if;
   if not exists (select 1 from auth.users where id = p_user) then raise exception 'Login not found'; end if;
   select role into cur from public.profiles where id = p_user;
   if me = 'hr' and (p_role <> 'site' or coalesce(cur, 'site') <> 'site') then raise exception 'HR can only manage site attendance logins'; end if;
@@ -615,7 +630,7 @@ drop policy if exists proc_events_insert on public.proc_events;
 create policy proc_events_read on public.proc_events for select to authenticated using (public.proc_view());
 create policy proc_events_insert on public.proc_events for insert to authenticated with check (public.is_proc());
 
--- Approval can only come from the owner or the accountant, through proc_decide below.
+-- Approval can only come from the owner or the admin, through proc_decide below.
 -- The procurement team can send a request for approval, but cannot approve it themselves.
 create or replace function public.proc_requests_guard() returns trigger
 language plpgsql security definer set search_path = public as
@@ -624,10 +639,10 @@ $$ begin
   new.updated_at := now();
   if coalesce(current_setting('sec.deciding', true), '') <> 'on' then
     if tg_op = 'INSERT' then
-      if new.approval_status in ('approved', 'rejected') then raise exception 'Only the owner or the accountant can approve'; end if;
+      if new.approval_status in ('approved', 'rejected') then raise exception 'Only the owner or the admin can approve'; end if;
     else
       if new.approval_status in ('approved', 'rejected') and new.approval_status is distinct from old.approval_status then
-        raise exception 'Only the owner or the accountant can approve';
+        raise exception 'Only the owner or the admin can approve';
       end if;
       if (new.approval_by, new.approval_at) is distinct from (old.approval_by, old.approval_at) and new.approval_status is not distinct from old.approval_status then
         new.approval_by := old.approval_by; new.approval_at := old.approval_at;
@@ -667,7 +682,7 @@ language plpgsql security definer set search_path = public as
 $$ declare r record; me record;
 begin
   select * into me from public.profiles where id = auth.uid() and active and role in ('admin', 'owner');
-  if me.id is null then raise exception 'Only the owner or the accountant can approve'; end if;
+  if me.id is null then raise exception 'Only the owner or the admin can approve'; end if;
   if p_decision not in ('approved', 'rejected') then raise exception 'Choose approve or reject'; end if;
   select * into r from public.proc_requests where id = p_request;
   if r.id is null then raise exception 'Request not found'; end if;

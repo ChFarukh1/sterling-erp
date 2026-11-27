@@ -98,7 +98,7 @@ GIVE SOMEONE A LOGIN (HR or a site supervisor)
   2. In the system: Users and access > Refresh. The new login shows "No access yet".
   3. Give access > choose the role. For a site login, tick his sites (a main site includes its teams).
   4. Give him the email and password. He opens the same web address on his phone.
-  To stop someone, set Status to Blocked. HR can manage site logins; only the accountant can make
+  To stop someone, set Status to Blocked. HR can manage site logins; only the admin can make
   someone HR, Owner or Accountant.
 
 ATTENDANCE RULES (checked by the database, so they cannot be skipped from a phone)
@@ -152,7 +152,7 @@ ROLES
   Accountant    everything, and can also approve.
   HR and site logins do not see procurement.
   Make a procurement login like any other: Supabase > Authentication > Add user, then
-  Users and access > Give access > Procurement (only the accountant can do this).
+  Users and access > Give access > Procurement (only the admin can do this).
 
 THE PROCESS (one material request goes through six steps)
   1. Request       title, site, project, required date, and the items from the BOQ:
@@ -166,7 +166,7 @@ THE PROCESS (one material request goes through six steps)
   4. Comparison    the comparative statement is built automatically, lowest rate per item in green.
                    Choose the recommended supplier. If it is not the lowest, or not fully compliant,
                    a reason is required. Press Send for approval. (Excel download and print available.)
-  5. Approval      the owner or the accountant approves or rejects with a note.
+  5. Approval      the owner or the admin approves or rejects with a note.
                    The database itself refuses approval from anyone else, and refuses a purchase order
                    before approval or from a different quotation than the approved one.
                    Changing the chosen quotation after approval cancels the approval.
@@ -184,3 +184,27 @@ AFTER THE PO
 SUPPLIERS
   Company, category, contact, NTN, brands, payment terms, rating and approved or not.
   Each supplier shows how many quotations and POs it has and how often it delivered on time.
+
+==========================================================================
+VERSION 12.1: ROLES PER PERSON, OVERTIME RATE, SCREEN STAYS IN PLACE
+==========================================================================
+Update: run 1_database_setup.sql, then 2_assign_roles.sql, in Supabase > SQL Editor.
+Replace the files in the site folder on GitHub; Cloudflare publishes them by itself.
+
+WHO HAS WHICH ROLE (set by 2_assign_roles.sql)
+  haroon.iftikhar@sterlingengineering.pk   Admin        everything, logins, settings, backup
+  salik@sterlingengineering.pk             Owner        sees payroll, attendance, letters, procurement;
+                                                        approves purchases; changes nothing else
+  yaseenwasif509@gmail.com                 Accountant   payroll only: salary runs, payments, advances,
+                                                        bank details, employees' pay, sites, reports.
+                                                        Reads attendance only to fill salary runs.
+  farhan.ali@sterlingengineering.pk        Procurement  procurement only
+  hr@sterlingengineering.pk                HR           employees, attendance, letters, site logins
+  Each login must exist first in Supabase > Authentication > Users. The second SQL file lists any
+  login that is MISSING; create it and run the file again.
+  Purchases are approved by the owner or the admin.
+
+OVERTIME RATE
+  In a salary run the overtime rate is the day rate divided by 8, filled in automatically (shown in
+  grey). If the day rate changes, the overtime rate follows. Type a different rate in the box only
+  for a special case; a typed rate is kept. People on a fixed amount per run keep their own rate.
