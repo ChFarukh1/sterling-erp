@@ -421,7 +421,7 @@ create or replace function public.staff_list() returns table (id uuid, email tex
 language sql stable security definer set search_path = public, auth as
 $$ select u.id, u.email::text, p.name, p.role, coalesce(p.site_ids, '{}'), coalesce(p.active, false), u.last_sign_in_at
      from auth.users u left join public.profiles p on p.id = u.id
-    where public.is_hr()
+    where exists (select 1 from public.profiles me where me.id = auth.uid() and me.active and me.role in ('admin', 'owner'))  -- v13.4: admin and owner only
     order by p.role nulls first, p.name, u.email $$;
 
 create or replace function public.staff_set(p_user uuid, p_role text, p_name text, p_site_ids uuid[], p_active boolean) returns void
@@ -429,7 +429,7 @@ language plpgsql security definer set search_path = public, auth as
 $$ declare me text; cur text;
 begin
   select role into me from public.profiles where id = auth.uid() and active;
-  if me is null or me not in ('admin', 'hr') then raise exception 'Not allowed'; end if;
+  if me is null or me <> 'admin' then raise exception 'Only the admin can change access'; end if;  -- v13.4: HR no longer manages logins
   if p_role not in ('admin', 'accountant', 'owner', 'hr', 'site', 'procurement') then raise exception 'Unknown role'; end if;
   if not exists (select 1 from auth.users where id = p_user) then raise exception 'Login not found'; end if;
   select role into cur from public.profiles where id = p_user;
@@ -791,6 +791,48 @@ begin
 end $$;
 revoke execute on function public.auto_checkin() from public, anon;
 grant execute on function public.auto_checkin() to authenticated;
+
+-- ---------- My profile, one field at a time (version 13.3) ----------
+-- Changes only the fields that are sent, so saving the gender never touches the photo or the status, and the
+-- other way round. Keys: name, avatar, gender, status, status_note, status_until.
+create or replace function public.my_profile_set(p jsonb) returns void
+language plpgsql security definer set search_path = public as
+$$ declare v_name text; v_status text;
+begin
+  if not exists (select 1 from public.profiles where id = auth.uid() and active and role in ('admin', 'accountant', 'hr', 'procurement')) then
+    raise exception 'Profiles are for admin, accountant, HR and procurement logins';
+  end if;
+  if p ? 'name' then
+    v_name := regexp_replace(trim(coalesce(p->>'name', '')), '\s+', ' ', 'g');
+    if length(v_name) < 2 or length(v_name) > 60 then raise exception 'The name must be 2 to 60 letters'; end if;
+    update public.profiles set name = v_name where id = auth.uid();
+  end if;
+  if p ? 'gender' then
+    if coalesce(p->>'gender', '') not in ('', 'M', 'F') then raise exception 'Unknown gender'; end if;
+    update public.profiles set gender = nullif(p->>'gender', '') where id = auth.uid();
+  end if;
+  if p ? 'avatar' then
+    if p->>'avatar' is not null and (length(p->>'avatar') > 300000 or p->>'avatar' !~ '^data:image/(jpeg|png|webp);base64,') then
+      raise exception 'The photo must be a small JPG or PNG image';
+    end if;
+    update public.profiles set avatar = p->>'avatar' where id = auth.uid();
+  end if;
+  if p ? 'status' then
+    v_status := p->>'status';
+    if v_status is null or v_status not in ('available', 'busy', 'away', 'ooo') then raise exception 'Unknown status'; end if;
+    update public.profiles set status_set_on = case when status is distinct from v_status then public.pk_today() else status_set_on end,
+           status = v_status where id = auth.uid();
+  end if;
+  if p ? 'status_note' then
+    update public.profiles set status_note = nullif(left(trim(coalesce(p->>'status_note', '')), 120), '') where id = auth.uid();
+  end if;
+  if p ? 'status_until' then
+    update public.profiles set status_until = nullif(p->>'status_until', '')::date where id = auth.uid();
+  end if;
+  update public.profiles set last_seen = now() where id = auth.uid();
+end $$;
+revoke execute on function public.my_profile_set(jsonb) from public, anon;
+grant execute on function public.my_profile_set(jsonb) to authenticated;
 
 -- Tell Supabase to pick up new and changed functions right away
 notify pgrst, 'reload schema';

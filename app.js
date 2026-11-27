@@ -630,6 +630,9 @@
     live: '<circle cx="12" cy="12" r="3"/><path d="M6.3 6.3a8 8 0 000 11.4M17.7 6.3a8 8 0 010 11.4"/>', cal: '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>',
     doc: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 13h6M9 17h6"/>', cart: '<path d="M3 4h2l2.4 11h10.2L20 8H6.3"/><circle cx="9" cy="19" r="1.4"/><circle cx="17" cy="19" r="1.4"/>', list: '<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>', truck: '<path d="M3 6h11v10H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="18" r="1.6"/><circle cx="17" cy="18" r="1.6"/>', store: '<path d="M4 9l1.5-5h13L20 9M4 9h16v11H4zM9 20v-6h6v6"/>', key: '<circle cx="8" cy="15" r="4"/><path d="M11 12l8-8M16 7l2 2M14 9l2 2"/>', check: '<path d="M5 12.5l4.5 4.5L19 7"/>'
   };
+  ICON.refresh = '<path d="M20 11a8 8 0 10-2.3 5.7"/><path d="M20 4v7h-7"/>';
+  // a round icon button for refreshing (keeps the word as a tooltip and for screen readers)
+  const refreshBtn = (act, label) => '<button class="b ico" data-act="' + act + '" title="' + (label || 'Refresh') + '" aria-label="' + (label || 'Refresh') + '">' + icon('refresh') + '</button>';
   const icon = (n) => '<svg viewBox="0 0 24 24" aria-hidden="true">' + (ICON[n] || ICON.grid) + '</svg>';
   const NAV = [
     ['Overview', [['dashboard', 'Payroll dashboard', 'grid']]],
@@ -665,9 +668,11 @@
   function paint(html) {
     const app = $('#app'), sel = anchorOf(lastEl), top = sel && lastEl.isConnected ? lastEl.getBoundingClientRect().top : null;
     const boxes = Array.from(app.querySelectorAll('.scroll,.reg-wrap,.sa-chips')).map((b) => [b.scrollLeft, b.scrollTop]);
+    const sideEl = app.querySelector('.side'), sideY = sideEl ? sideEl.scrollTop : 0; // the menu keeps its place
     const y = window.scrollY;
     app.innerHTML = html;
     window.scrollTo(0, y);
+    const side2 = app.querySelector('.side'); if (side2 && sideY) side2.scrollTop = sideY;
     Array.from(app.querySelectorAll('.scroll,.reg-wrap,.sa-chips')).forEach((b, i) => { if (boxes[i]) { b.scrollLeft = boxes[i][0]; b.scrollTop = boxes[i][1]; } });
     if (sel && top !== null) { let now = null; try { now = app.querySelector(sel); } catch (e) { /* odd selector: keep the page scroll */ } if (now) { const d = now.getBoundingClientRect().top - top; if (Math.abs(d) > 1) window.scrollBy(0, d); lastEl = now; } }
   }
@@ -677,8 +682,8 @@
     if (!allowed(UI.view)) UI.view = allowed(homeView()) ? homeView() : 'dashboard';
     const initials = (UI.name || UI.user || 'D').split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
     const meTag = allowed('profile') ? 'button class="me" data-act="nav" data-v="profile" title="My profile and status"' : 'div class="me"';
-    const meBox = '<' + meTag + '>' + (EXT.avatar ? EXT.avatar(initials) : '<span class="av">' + esc(initials) + '</span>') + '<div><div class="who"' + (UI.name ? ' title="' + esc(UI.user || '') + '"' : '') + '>' + esc(UI.name || UI.user || (LIVE ? '' : 'Demo user')) + '</div><span class="role">' + (ROLE_NAME[UI.role] || UI.role) + '</span>' + (EXT.statusLine ? EXT.statusLine() : '') + '</div></' + meTag.split(' ')[0] + '>';
-    const who = LIVE ? meBox + '<button data-act="refresh">Refresh data</button><button data-act="changePw">Change password</button><button data-act="logout">Sign out</button>' : meBox + '<span class="role">Demo mode</span>';
+    const meBox = '<' + meTag + '>' + (EXT.avatar ? EXT.avatar(initials) : '<span class="av">' + esc(initials) + '</span>') + '<div class="me-t"><div class="who" title="' + esc(UI.user || UI.name || '') + '">' + esc(UI.name || UI.user || (LIVE ? '' : 'Demo user')) + '</div><div class="me-sub"><span class="role">' + (ROLE_NAME[UI.role] || UI.role) + '</span>' + (EXT.statusLine ? EXT.statusLine() : '') + '</div></div></' + meTag.split(' ')[0] + '>';
+    const who = LIVE ? meBox + '<div class="foot-row"><button data-act="changePw">Change password</button><button class="ico" data-act="refresh" title="Refresh data" aria-label="Refresh data">' + icon('refresh') + '</button></div><button data-act="logout">Sign out</button>' : meBox + '<span class="role">Demo mode</span>';
     let h = '<div class="shell"><nav class="side" data-version="' + VERSION + '"><div class="brand"><img src="logo.jpg" alt=""><span>Sterling Engineering<small>Payroll · HR · Attendance</small></span></div><div class="nav">' + navHtml() + '</div><div class="foot">' + who + '</div></nav><div class="scrim" data-act="toggleNav"></div><main class="main"><header class="mtop"><button class="hamb" data-act="toggleNav" aria-label="Menu">\u2630</button><img src="logo.jpg" alt=""><b>Sterling Engineering</b></header>';
     if (!LIVE) h += '<div class="banner"><span><b>Demo mode.</b> Data is kept only in this browser until the system is connected to the database.</span><span class="right">View as <select data-chg="role">' + Object.keys(ROLE_NAME).map((r) => '<option value="' + r + '"' + (UI.role === r ? ' selected' : '') + '>' + ROLE_NAME[r] + '</option>').join('') + '</select></span></div>';
     if (UI.schemaOld && !isSys()) h += '<div class="banner" style="background:var(--bad-bg);color:var(--bad)"><b>Sorry for the inconvenience.</b> Some parts of the system are being updated and may not work yet. Please contact the developer.</div>';
@@ -1022,7 +1027,7 @@
   if (LIVE) setInterval(autoRefresh, Math.max(1, Number(cfg.refreshSeconds) || 45) * 1000);
 
   // ---------- interface for other modules ----------
-  window.SEC = { S, UI, PL, EXT, A, C, LIVE, cfg, get sb() { return sb; }, $, esc, fmt, fmt0, dmy, uuid, today, toast, fail, numOrNull, strOrNull, save, saveMany, remove, render, index, siteName, siteOptions, sortedSites, leafSites, stat, xlsxOut, download, isAdmin, isSys, isHR, canHR, icon, typing, refreshData, get EMP() { return EMP; }, get SITE() { return SITE; }, get RUN() { return RUN; }, startApp: () => start().catch((e) => { console.error(e); sorry(e && e.message ? e.message : e, !!(sb && UI.user)); }) };
+  window.SEC = { S, UI, PL, EXT, A, C, LIVE, cfg, get sb() { return sb; }, $, esc, fmt, fmt0, dmy, uuid, today, toast, fail, numOrNull, strOrNull, save, saveMany, remove, render, index, siteName, siteOptions, sortedSites, leafSites, stat, xlsxOut, download, isAdmin, isSys, isHR, canHR, icon, refreshBtn, typing, refreshData, get EMP() { return EMP; }, get SITE() { return SITE; }, get RUN() { return RUN; }, startApp: () => start().catch((e) => { console.error(e); sorry(e && e.message ? e.message : e, !!(sb && UI.user)); }) };
 
   // ---------- start ----------
   let recovering = false;

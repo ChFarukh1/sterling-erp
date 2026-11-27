@@ -1,6 +1,5 @@
 STERLING ENGINEERING - PAYROLL, HR, ATTENDANCE AND PROCUREMENT - SETUP GUIDE (version 12)
 
-
 FILES
   index.html, app.js, logic.js, config.js   the system (payroll)
   hr.js                                     HR, live attendance, attendance register, letters, users and access
@@ -237,3 +236,22 @@ VERSION 13.2: STATUS SAVES ON CLICK, DAILY CHECK-IN
   no end date or an end date still to come, or they already picked a status themselves that day.
   Team status shows "Not in today" for people who have not opened the system today, and "Off hours"
   after 5 PM. To change office hours, edit the lines marked OFFICE in 1_database_setup.sql and in profile.js.
+
+VERSION 13.3: NAME, PHOTO AND GENDER SAVE ON CHANGE
+  On My profile, the name, photo and gender save as soon as they are changed (the name saves when you
+  press Enter or click away). Only the note and back-on date use Save.
+  Each change saves only that field (database function my_profile_set), so changing the status never
+  resets the photo or gender. The new name shows in the sidebar, on Team status and on documents.
+  The sidebar card now shows the name on top and the role and status on one line.
+
+VERSION 13.4: USERS AND ACCESS FOR ADMIN AND OWNER ONLY
+  Users and access is shown only to the admin (who can change access) and the owner (view only).
+  HR no longer sees it and can no longer give or block logins; the database refuses it too.
+  New site logins: contact the developer.
+  The HR settings moved to the HR pages: "Attendance rules" is at the bottom of Attendance register,
+  "Letter signatory" is at the bottom of HR letters.
+
+VERSION 13.5: MENU KEEPS ITS PLACE, REFRESH ICONS
+  Clicking an item lower down in the left menu no longer jumps the menu back to the top.
+  The Refresh buttons (Live attendance, Team status, and Refresh data in the sidebar) are now a round
+  refresh icon. Hovering over it still shows what it does.

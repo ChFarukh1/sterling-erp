@@ -192,7 +192,7 @@
     const day = UI.attDay || (UI.attDay = pkDay()), today = pkDay();
     const rows = attFor(day, day, true);
     let h = pageHead('Live attendance', day === today ? 'Today, ' + wkday(day) + ' ' + dmy(day) + '. Marks from every site appear here as they come in.' : wkday(day) + ' ' + dmy(day), liveTag());
-    h += '<div class="bar"><label>Day<input type="date" data-chg="attDay" value="' + esc(day) + '" max="' + today + '"></label>' + (day !== today ? '<button class="b" data-act="attToday">Back to today</button>' : '') + '<button class="b" data-act="attReload">Refresh now</button></div>';
+    h += '<div class="bar"><label>Day<input type="date" data-chg="attDay" value="' + esc(day) + '" max="' + today + '"></label>' + (day !== today ? '<button class="b" data-act="attToday">Back to today</button>' : '') + X.refreshBtn('attReload', 'Refresh now') + '</div>';
     if (ATT.err) h += '<div class="banner" style="background:var(--bad-bg);color:var(--bad)">Could not load attendance: ' + esc(ATT.err) + '. If the database was just updated, run 1_database_setup.sql again.</div>';
     if (!rows) return h + '<div class="card"><p class="mut">Loading attendance…</p></div>';
     const marks = markMap(rows, day), by = rosterBySite(day, marks), groups = Object.values(by);
@@ -222,7 +222,23 @@
   }
 
   // ---------- Attendance register ----------
-  function vAttSheet() {
+  // HR settings, shown on the HR pages (attendance rules on the register, signatory on letters)
+  function rulesCard() {
+    if (!canHR()) return '';
+    let h = '';
+    const same = M.settings.site_same_day_edit !== false;
+    h += '<div class="card"><h2 style="margin-top:0">Attendance rules</h2><label class="chk"><input type="checkbox" data-chg="setSameDay"' + (same ? ' checked' : '') + '> Site logins can correct their own marks until midnight (Pakistan time)</label><p class="mut" style="font-size:13px;margin:6px 0 0">' + (same ? 'A site login can change a mark during the same day. From the next day the day is locked for him; only HR can change it.' : 'A mark is locked as soon as it is saved. Only HR can change it.') + ' Site logins can never mark a past or future day.</p></div>';
+    return h;
+  }
+  function sigCard() {
+    if (!canHR()) return '';
+    const sig = M.settings.signatory || {};
+    let h = '';
+    h += '<div class="card"><h2 style="margin-top:0">Letter signatory</h2><div class="bar" style="margin:0"><label>Name<input id="sig-name" value="' + esc(sig.name || '') + '"></label><label>Title<input id="sig-title" value="' + esc(sig.title || '') + '"></label><button class="b" data-act="sigSave">Save</button></div></div>';
+    return h;
+  }
+  const vAttSheet = () => vAttSheetBody() + rulesCard();
+  function vAttSheetBody() {
     const today = pkDay();
     const leaves = X.leafSites();
     if (!UI.regSite || !X.SITE[UI.regSite]) UI.regSite = (leaves.find((s) => S.employees.some((e) => e.site_id === s.id && e.active !== false)) || leaves[0] || {}).id || '';
@@ -323,7 +339,8 @@
     if (!list.length) return '<div class="picked">No employee matches. ' + (UI.letKind === 'offer' ? 'For a new candidate, type his details in the form below.' : '') + '</div>';
     return '<div class="plist">' + list.slice(0, 8).map((e) => '<button type="button" data-act="letPick" data-id="' + e.id + '">' + esc(e.name) + ' <span class="mut">' + esc(e.emp_code || '') + ' · ' + esc(X.siteName(e.site_id)) + (e.active === false ? ' · left' : '') + '</span></button>').join('') + '</div>';
   }
-  function vLetters() {
+  const vLetters = () => vLettersBody() + sigCard();
+  function vLettersBody() {
     if (!UI.letKind) UI.letKind = 'offer';
     if (!UI.letData) UI.letData = letterDefaults(UI.letKind, X.EMP[UI.letEmp]);
     const sig = M.settings.signatory || {};
@@ -332,7 +349,7 @@
       h += '<div class="tabs">' + Object.keys(KINDS).map((k) => '<button class="tab' + (UI.letKind === k ? ' on' : '') + '" data-act="letKind" data-k="' + k + '">' + KINDS[k].name + '</button>').join('') + '</div>';
       h += '<div class="card"><div class="bar" style="margin-bottom:6px"><label style="position:relative">Employee<input id="let-q" autocomplete="off" placeholder="Type a name, code or CNIC" style="width:280px" value="' + esc(UI.letQ || '') + '"><div id="let-results" class="' + (UI.letEmp ? 'inflow' : 'picker') + '">' + letPicker() + '</div></label></div>';
       h += letterForm();
-      h += '<p class="mut" style="font-size:12px">' + (UI.letKind === 'termination' ? 'Signed as Authorized Signatory, Human Resources Division.' : 'Signed by ' + esc(sig.name || '') + ', ' + esc(sig.title || '') + '. Change this in Users and access.') + '</p>';
+      h += '<p class="mut" style="font-size:12px">' + (UI.letKind === 'termination' ? 'Signed as Authorized Signatory, Human Resources Division.' : 'Signed by ' + esc(sig.name || '') + ', ' + esc(sig.title || '') + '. Change it at the bottom of this page.') + '</p>';
       h += '<p style="margin:12px 0 0;display:flex;gap:8px;flex-wrap:wrap"><button class="b pri" data-act="letMake">Download Word letter</button><button class="b" data-act="letReset">Clear the form</button></p></div>';
     }
     h += '<div class="card"><div class="card-h"><h2>Letter register</h2><span class="mut">' + M.letters.length + ' letter(s)</span></div>';
@@ -406,25 +423,22 @@
   function vUsers() {
     if (STAFF === null) { loadStaff(); return pageHead('Users and access') + '<div class="card"><p class="mut">Loading…</p></div>'; }
     const admin = X.isSys();
-    let h = pageHead('Users and access', 'Who can sign in, what each person can do, and which sites a site login can mark.');
+    let h = pageHead('Users and access', 'Who can sign in, what each person can do, and which sites a site login can mark.' + (admin ? '' : ' Only the admin can change access.'));
     if (staffErr) h += '<div class="banner" style="background:var(--bad-bg);color:var(--bad)">Could not load users: ' + esc(staffErr) + '. Run 1_database_setup.sql again if the database was not updated.</div>';
     const ed = UI.userEdit && STAFF.find((u) => u.id === UI.userEdit);
     if (ed) {
-      const roles = admin ? Object.keys(RN) : ['site'];
+      const roles = Object.keys(RN);
       h += '<div class="card" id="user-form"><h2 style="margin-top:0">' + esc(ed.email) + '</h2><div class="form"><label>Name shown in the system<input name="u-name" value="' + esc(ed.name || '') + '" placeholder="Site supervisor name"></label><label>Access<select name="u-role" data-chg="userRole">' + roles.map((r) => '<option value="' + r + '"' + ((UI.userRole || ed.role || 'site') === r ? ' selected' : '') + '>' + RN[r] + '</option>').join('') + '</select></label><label>Status<select name="u-active"><option value="1"' + (ed.active !== false || !ed.role ? ' selected' : '') + '>Can sign in</option><option value="0"' + (ed.active === false && ed.role ? ' selected' : '') + '>Blocked</option></select></label></div>';
       if ((UI.userRole || ed.role || 'site') === 'site') h += '<h2>Sites this login marks</h2><p class="mut" style="font-size:12px;margin-top:0">Choosing a main site includes the teams inside it.</p>' + siteChecks(ed.site_ids);
       h += '<p style="margin:14px 0 0;display:flex;gap:8px"><button class="b pri" data-act="userSave">Save</button><button class="b" data-act="userCancel">Cancel</button></p></div>';
     }
     h += '<div class="card"><div class="scroll"><table><tr><th>Name</th><th>Email</th><th>Access</th><th>Sites</th><th>Status</th><th>Last sign-in</th><th></th></tr>';
     STAFF.forEach((u) => {
-      const can = admin || u.role === 'site' || !u.role;
+      const can = admin;
       h += '<tr><td>' + esc(u.name || '') + '</td><td>' + esc(u.email) + '</td><td>' + (u.role ? esc(RN[u.role] || u.role) : '<span class="pill p-warn">No access yet</span>') + '</td><td>' + esc((u.site_ids || []).map((id) => X.SITE[id] ? X.siteName(id) : '').filter(Boolean).join(', ')) + '</td><td>' + (!u.role ? '' : u.active === false ? '<span class="pill p-bad">Blocked</span>' : '<span class="pill p-ok">Active</span>') + '</td><td class="nowrap">' + (u.last_sign_in ? pkStamp(u.last_sign_in) : '<span class="mut">Never</span>') + '</td><td>' + (can && u.email !== UI.user ? '<button class="b sm" data-act="userEdit" data-id="' + u.id + '">' + (u.role ? 'Edit' : 'Give access') + '</button>' : '') + '</td></tr>';
     });
     h += '</table></div></div>';
-    h += '<div class="card"><h2 style="margin-top:0">Adding a site login</h2><ol class="steps"><li>The accountant opens Supabase, Authentication, Users, Add user, and creates the login with an email and password. Tick "Auto Confirm User". A made-up company address works, for example pepsico.site@sterlingengineering.pk.</li><li>Press Refresh on this page. The new login shows as "No access yet".</li><li>Press Give access, choose Site attendance, tick the sites, and save.</li><li>Give the email and password to the site supervisor. He opens the system address on his phone and signs in. He only sees the attendance screen for his sites.</li></ol><button class="b" data-act="userReload">Refresh</button></div>';
-    const same = M.settings.site_same_day_edit !== false, sig = M.settings.signatory || {};
-    h += '<div class="card"><h2 style="margin-top:0">Attendance rules</h2><label class="chk"><input type="checkbox" data-chg="setSameDay"' + (same ? ' checked' : '') + '> Site logins can correct their own marks until midnight (Pakistan time)</label><p class="mut" style="font-size:13px;margin:6px 0 0">' + (same ? 'A site login can change a mark during the same day. From the next day the day is locked for him; only HR can change it.' : 'A mark is locked as soon as it is saved. Only HR can change it.') + ' Site logins can never mark a past or future day.</p></div>';
-    h += '<div class="card"><h2 style="margin-top:0">Letter signatory</h2><div class="bar" style="margin:0"><label>Name<input id="sig-name" value="' + esc(sig.name || '') + '"></label><label>Title<input id="sig-title" value="' + esc(sig.title || '') + '"></label><button class="b" data-act="sigSave">Save</button></div></div>';
+    h += '<div class="card"><h2 style="margin-top:0">Adding a site login</h2><p style="margin:0">Contact developer.</p></div>';
     return h;
   }
 
@@ -597,10 +611,11 @@
   });
   // Who may use what. Owner only looks; HR and the accountant change things; site logins only mark.
   const hrOnly = () => X.canHR(), siteOnly = () => UI.role === 'site';
-  ['hrMark', 'hrAllP', 'regEdit', 'letKind', 'letPick', 'letClearEmp', 'letReset', 'letMake', 'userEdit', 'userSave', 'sigSave'].forEach((k) => { EXT.actAllowed[k] = hrOnly; });
+  ['hrMark', 'hrAllP', 'regEdit', 'letKind', 'letPick', 'letClearEmp', 'letReset', 'letMake', 'sigSave'].forEach((k) => { EXT.actAllowed[k] = hrOnly; });
+  ['userEdit', 'userSave', 'userCancel'].forEach((k) => { EXT.actAllowed[k] = () => X.isSys(); });
   ['saTap', 'saOtStep', 'saOtSave', 'saConfirm', 'saCancel', 'saAllP', 'saSite', 'saFilter', 'saMenu', 'saReload'].forEach((k) => { EXT.actAllowed[k] = siteOnly; });
   EXT.actAllowed.fillFromAtt = () => X.isAdmin();
-  EXT.chgAllowed = { attDay: staffRole, regSet: staffRole, userRole: hrOnly, setSameDay: hrOnly, demoSite: () => !LIVE };
+  EXT.chgAllowed = { attDay: staffRole, regSet: staffRole, userRole: () => X.isSys(), setSameDay: hrOnly, demoSite: () => !LIVE };
 
   // typing in the letter form and the search boxes
   document.addEventListener('input', (ev) => {
@@ -623,7 +638,8 @@
   Object.assign(EXT.views, { attlive: vAttLive, attsheet: vAttSheet, letters: vLetters, users: vUsers });
   EXT.nav.push({ group: 'Overview', item: ['attlive', 'Live attendance', 'live'], first: true }, { group: 'People', item: ['attsheet', 'Attendance register', 'cal'] }, { group: 'People', item: ['letters', 'HR letters', 'doc'] }, { group: 'Administration', item: ['users', 'Users and access', 'key'], first: true });
   EXT.roleViews.owner.push('attlive', 'attsheet', 'letters');
-  EXT.roleViews.hr.push('attlive', 'attsheet', 'letters', 'users');
+  EXT.roleViews.hr.push('attlive', 'attsheet', 'letters');
+  EXT.roleViews.owner.push('users'); // the owner can see who has access; only the admin changes it
   EXT.siteApp = siteApp;
   X.docs = { build: buildDoc, save: (name, blob) => saveBlob(name, blob), longDate: longDate, pkDay: pkDay, pkTime: pkTime, pkStamp: pkStamp, addDays: addDays };
   const hrLoader = async () => {

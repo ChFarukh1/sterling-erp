@@ -40,20 +40,31 @@
   async function myId() { const r = await X.sb.auth.getSession(); return r.data && r.data.session ? r.data.session.user.id : null; }
   async function loadMe() {
     if (!canEdit() && UI.role !== 'owner') return;
-    if (!LIVE) { Object.assign(ME, { avatar: null, gender: '', status: 'available', status_note: '', status_until: null }, demo()[UI.role] || {}); demoCheckin(); return; }
+    if (!LIVE) { const d = demo()[UI.role] || {}; Object.assign(ME, { avatar: null, gender: '', status: 'available', status_note: '', status_until: null }, d); if (d.name) UI.name = d.name; delete ME.name; demoCheckin(); DRAFT = null; return; }
     try {
       const id = await myId(); if (!id) return;
       if (canEdit()) await X.sb.rpc('auto_checkin').then(() => {}, () => {}); // daily check-in during office hours
-      const r = await X.sb.from('profiles').select('avatar,gender,status,status_note,status_until').eq('id', id).maybeSingle();
-      if (!r.error && r.data) Object.assign(ME, r.data);
+      const r = await X.sb.from('profiles').select('name,avatar,gender,status,status_note,status_until').eq('id', id).maybeSingle();
+      if (!r.error && r.data) {
+        const nm = (r.data.name || '').trim(); if (nm && !/^(accountant|owner)$/i.test(nm)) UI.name = nm;
+        delete r.data.name; Object.assign(ME, r.data, { gender: r.data.gender || '' });
+        DRAFT = null; // the form must show what is saved, not what was on screen before the profile arrived
+      }
       if (!canEdit()) ping();
     } catch (e) { console.error(e); }
   }
+  // Saves only the fields given (name, avatar, gender, status, status_note, status_until); the rest stay as they are.
   async function saveMe(p) {
-    if (!LIVE) { const d = demo(), old = d[UI.role] || {}; d[UI.role] = Object.assign({}, old, p, { last_seen: new Date().toISOString(), status_set_on: old.status !== p.status ? today() : old.status_set_on }); localStorage.setItem(DKEY, JSON.stringify(d)); Object.assign(ME, p); return; }
-    const r = await X.sb.rpc('my_profile_save', { p_avatar: p.avatar || null, p_gender: p.gender || '', p_status: p.status, p_note: p.status_note || '', p_until: p.status_until || null });
-    if (r.error) throw r.error;
-    Object.assign(ME, p);
+    if (!LIVE) {
+      const d = demo(), old = d[UI.role] || {};
+      d[UI.role] = Object.assign({}, old, p, { last_seen: new Date().toISOString() }, 'status' in p && old.status !== p.status ? { status_set_on: today() } : {});
+      localStorage.setItem(DKEY, JSON.stringify(d));
+    } else {
+      const r = await X.sb.rpc('my_profile_set', { p });
+      if (r.error) throw r.error;
+    }
+    const q = Object.assign({}, p); if ('name' in q) { UI.name = q.name; delete q.name; }
+    Object.assign(ME, q);
   }
   async function loadTeam() {
     teamErr = '';
@@ -93,11 +104,11 @@
   // ---------- My profile ----------
   let DRAFT = null;
   function vProfile() {
-    if (!DRAFT) DRAFT = Object.assign({}, eff(ME));
-    const d = DRAFT, name = UI.name || UI.user || 'Demo user';
+    if (!DRAFT) { const e = eff(ME); DRAFT = { status_note: e.status_note || '', status_until: e.status_until || null }; }
+    const d = Object.assign({}, eff(ME), DRAFT), name = UI.name || UI.user || 'Demo user';
     let h = '<div class="page-h"><div><h1>My profile</h1><p class="sub">Your photo and status are shown to the owner and the admin on the Team status page.</p></div></div>';
     h += '<div class="card prof"><div class="prof-l">' + avatar(d, name, 120, false) + '<label class="b sm">' + (d.avatar ? 'Change photo' : 'Upload photo') + '<input type="file" accept="image/*" hidden data-chg="pfPhoto"></label>' + (d.avatar ? '<button class="link" data-act="pfNoPhoto">Remove photo</button>' : '') + '</div>';
-    h += '<div class="prof-r"><table class="kv"><tr><td>Name</td><td><b>' + esc(name) + '</b></td></tr>' + (UI.user ? '<tr><td>Email</td><td>' + esc(UI.user) + '</td></tr>' : '') + '<tr><td>Role</td><td>' + esc(ROLE_L[UI.role] || UI.role) + '</td></tr><tr><td>Gender</td><td><select id="pf-gender"><option value="">Prefer not to say</option><option value="M"' + (d.gender === 'M' ? ' selected' : '') + '>Male</option><option value="F"' + (d.gender === 'F' ? ' selected' : '') + '>Female</option></select></td></tr></table><p class="mut" style="font-size:12px;margin:8px 0 0">Your name, email and role are set by the admin.</p></div></div>';
+    h += '<div class="prof-r"><table class="kv"><tr><td>Name</td><td><input id="pf-name" data-chg="pfName" maxlength="60" value="' + esc(UI.name || '') + '" placeholder="Your full name"></td></tr>' + (UI.user ? '<tr><td>Email</td><td>' + esc(UI.user) + '</td></tr>' : '') + '<tr><td>Role</td><td>' + esc(ROLE_L[UI.role] || UI.role) + '</td></tr><tr><td>Gender</td><td><select id="pf-gender" data-chg="pfGender"><option value="">Prefer not to say</option><option value="M"' + (d.gender === 'M' ? ' selected' : '') + '>Male</option><option value="F"' + (d.gender === 'F' ? ' selected' : '') + '>Female</option></select></td></tr></table><p class="mut" style="font-size:12px;margin:8px 0 0">Name, photo and gender save as soon as you change them. Email and role are set by the admin.</p></div></div>';
     h += '<div class="card"><h2 style="margin-top:0">Status</h2><div class="stgrid">' + Object.keys(ST).map((k) => '<button class="stopt' + (d.status === k ? ' on' : '') + '" data-act="pfStatus" data-s="' + k + '">' + pill(k) + '<small>' + ST_HINT[k] + '</small></button>').join('') + '</div>';
     h += '<div class="form" style="margin-top:14px"><label class="span2">What are you doing? (optional)<input id="pf-note" maxlength="120" value="' + esc(d.status_note || '') + '" placeholder="' + (d.status === 'ooo' ? 'On leave, back on Monday' : d.status === 'busy' ? 'Meeting with PepsiCo team' : 'At the Nestle site today') + '"></label><label>' + (d.status === 'available' ? 'Clear the note after' : 'Back on / clear after') + '<input type="date" id="pf-until" value="' + esc(d.status_until || '') + '" min="' + today() + '"></label></div>';
     h += '<p class="mut" style="font-size:12px;margin:10px 0 0">Your status saves as soon as you click it. During office hours (9 AM to 5 PM, Monday to Saturday) you are set to Available the first time you open the system each day, unless you are on leave.</p><p style="margin:12px 0 0;display:flex;gap:8px"><button class="b pri" data-act="pfSave">Save</button><button class="b" data-act="pfReset">Undo changes</button></p></div>';
@@ -109,7 +120,7 @@
     if (TEAM === null) { setTimeout(loadTeam, 0); return '<div class="page-h"><div><h1>Team status</h1></div></div><div class="card"><p class="mut">Loading…</p></div>'; }
     const list = TEAM.map(eff), c = { available: 0, busy: 0, away: 0, ooo: 0 }; let on = 0;
     list.forEach((p) => { c[p.status || 'available']++; if (online(p)) on++; });
-    let h = '<div class="page-h"><div><h1>Team status</h1><p class="sub">Admin, accountant, HR and procurement. Online means the system is open on their device now.</p></div><div class="page-r"><span class="live"><i></i>Updated ' + (teamAt ? teamAt.toLocaleTimeString('en-GB') : '') + '</span><button class="b" data-act="teamReload">Refresh</button></div></div>';
+    let h = '<div class="page-h"><div><h1>Team status</h1><p class="sub">Admin, accountant, HR and procurement. Online means the system is open on their device now.</p></div><div class="page-r"><span class="live"><i></i>Updated ' + (teamAt ? teamAt.toLocaleTimeString('en-GB') : '') + '</span>' + X.refreshBtn('teamReload') + '</div></div>';
     if (teamErr) h += '<div class="banner" style="background:var(--bad-bg);color:var(--bad)"><b>Sorry for the inconvenience.</b> The team list could not be loaded. Please contact the developer. <small>' + esc(teamErr) + '</small></div>';
     h += '<div class="cards kpi">' + X.stat('Online now', on, 'ok') + X.stat('Available', c.available) + X.stat('Busy', c.busy) + X.stat('Away', c.away) + X.stat('Out of office', c.ooo) + '</div>';
     if (!list.length) return h + '<div class="card"><p class="mut">No staff logins yet.</p></div>';
@@ -134,31 +145,42 @@
       fr.readAsDataURL(file);
     });
   }
-  const readForm = () => { const g = $('#pf-gender'), n = $('#pf-note'), u = $('#pf-until'); if (g) DRAFT.gender = g.value; if (n) DRAFT.status_note = n.value.trim(); if (u) DRAFT.status_until = u.value || null; };
+  // keep what is typed in the note and date boxes (not saved yet) when the page redraws
+  const readForm = () => { if (!DRAFT) return; const n = $('#pf-note'), u = $('#pf-until'); if (n) DRAFT.status_note = n.value.trim(); if (u) DRAFT.status_until = u.value || null; };
   Object.assign(A, {
     async pfStatus(el) {
       readForm();
       const s = el.dataset.s, clear = s === 'available';
-      if (s === ME.status) return;
+      if (s === eff(ME).status && s === ME.status) return;
       // save only the status (and clear the old note when going back to Available); typed but unsaved changes stay on the form
-      await saveMe(Object.assign({}, ME, { status: s }, clear ? { status_note: null, status_until: null } : {}));
-      DRAFT.status = s; if (clear) { DRAFT.status_note = ''; DRAFT.status_until = null; }
+      await saveMe(Object.assign({ status: s }, clear ? { status_note: null, status_until: null } : {}));
+      if (clear && DRAFT) { DRAFT.status_note = ''; DRAFT.status_until = null; }
       X.render(); toast('Status: ' + ST[s][0] + '.');
     },
-    pfNoPhoto() { readForm(); DRAFT.avatar = null; X.render(); },
+    async pfNoPhoto() { readForm(); await saveMe({ avatar: null }); X.render(); toast('Photo removed.'); },
     pfReset() { DRAFT = null; X.render(); },
     async pfSave() {
       readForm();
       if (DRAFT.status_until && DRAFT.status_until < today()) return toast('Choose today or a later date.');
-      await saveMe({ avatar: DRAFT.avatar || null, gender: DRAFT.gender || '', status: DRAFT.status, status_note: DRAFT.status_note || '', status_until: DRAFT.status_until || null });
-      DRAFT = null; X.render(); toast('Saved. Your status is now ' + ST[ME.status][0] + '.');
+      await saveMe({ status_note: DRAFT.status_note || '', status_until: DRAFT.status_until || null });
+      DRAFT = null; X.render(); toast('Saved.');
     },
     teamReload() { loadTeam(); }
   });
-  Object.assign(C, { async pfPhoto(el) { const f = el.files && el.files[0]; if (!f) return; readForm(); DRAFT.avatar = await shrink(f); X.render(); toast('Photo ready. Press Save to keep it.'); } });
+  Object.assign(C, {
+    async pfPhoto(el) { const f = el.files && el.files[0]; if (!f) return; readForm(); const pic = await shrink(f); await saveMe({ avatar: pic }); X.render(); toast('Photo saved.'); },
+    async pfGender(el) { readForm(); await saveMe({ gender: el.value }); X.render(); toast('Gender saved.'); },
+    async pfName(el) {
+      readForm();
+      const v = el.value.replace(/\s+/g, ' ').trim();
+      if (v === (UI.name || '')) return;
+      if (v.length < 2) { el.value = UI.name || ''; return toast('Type your full name (at least 2 letters).'); }
+      await saveMe({ name: v }); X.render(); toast('Name saved.');
+    }
+  });
   ['pfStatus', 'pfNoPhoto', 'pfReset', 'pfSave'].forEach((k) => { EXT.actAllowed[k] = canEdit; });
   EXT.actAllowed.teamReload = canSee;
-  EXT.chgAllowed.pfPhoto = canEdit;
+  ['pfPhoto', 'pfGender', 'pfName'].forEach((k) => { EXT.chgAllowed[k] = canEdit; });
 
   // ---------- register with the app ----------
   Object.assign(EXT.views, { profile: vProfile, team: vTeam });
